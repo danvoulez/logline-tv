@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: voulezvous
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  migrate:
+    build: .
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    command: app api --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
+      DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
+      SPOOL_ROOT: /spool
+      STREAM_TARGET: "null"
+      LOG_LEVEL: INFO
+    volumes:
+      - spool:/spool
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  prep-worker:
+    build: .
+    command: app prep-worker --interval 30
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
+      DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
+      SPOOL_ROOT: /spool
+      STREAM_TARGET: "null"
+    volumes:
+      - spool:/spool
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  streamer:
+    build: .
+    command: app streamer
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
+      DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
+      SPOOL_ROOT: /spool
+      STREAM_TARGET: "null"
+      FALLBACK_VIDEO: fallback.mp4
+    volumes:
+      - spool:/spool
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  spool:
