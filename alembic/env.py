@@ -13,6 +13,18 @@ from voulezvous.models.tables import (  # noqa: F401 – ensure tables are regis
     StreamPlan,
     StreamPlanItem,
 )
+from voulezvous.acquisition.models import (  # noqa: F401 – register acquisition tables
+    AssetEnrichment,
+    AutonomyReport,
+    CandidateAsset,
+    DiscoveryRun,
+    DomainPolicy,
+    LineupItem,
+    LineupRun,
+    MediaIRJob,
+    RetrievalAdapter,
+    SearchKeyword,
+)
 
 config = context.config
 
