@@ -26,6 +26,7 @@ from datetime import date, datetime, timedelta, timezone
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from voulezvous.acquisition.enums import (
     CandidateRightsStatus,
@@ -65,6 +66,8 @@ async def build_candidate_shelf(db: AsyncSession) -> list[CandidateAsset]:
             ]),
             CandidateAsset.duration_sec.isnot(None),
             CandidateAsset.duration_sec > 0,
+        ).options(
+            selectinload(CandidateAsset.enrichment)
         ).order_by(CandidateAsset.created_at.desc())
     )
     return list(result.scalars().all())

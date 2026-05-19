@@ -126,7 +126,7 @@ class CandidateOut(BaseModel):
     duration_sec: int | None
     quality_signals: dict
     tags: list | dict
-    metadata: dict
+    metadata: dict = Field(validation_alias="extra_metadata")
     playback_verified: bool
     retrieval_status: RetrievalStatus
     rights_status: CandidateRightsStatus
@@ -135,7 +135,7 @@ class CandidateOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 # ---------- Lineup ----------

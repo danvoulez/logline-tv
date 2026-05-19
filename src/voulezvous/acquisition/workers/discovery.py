@@ -188,15 +188,18 @@ async def run_discovery(db: AsyncSession, run_date: date | None = None) -> Disco
                     )
 
                     if has_retrieval and retrieval_type:
+                        candidate.retrieval_status = RetrievalStatus.authorized_direct
+                        candidate.discovery_status = DiscoveryStatus.accepted
+                        db.add(candidate)
+                        await db.flush()
                         adapter_record = RetrievalAdapter(
                             candidate_asset_id=candidate.id,
                             adapter_type=AdapterType(retrieval_type),
                             adapter_spec={"url": source_url},
                         )
                         db.add(adapter_record)
+                        await db.flush()
                         candidate.retrieval_adapter_id = adapter_record.id
-                        candidate.retrieval_status = RetrievalStatus.authorized_direct
-                        candidate.discovery_status = DiscoveryStatus.accepted
                         total_accepted += 1
 
                         record_audit(
@@ -309,15 +312,18 @@ async def run_discovery_simulated(db: AsyncSession, run_date: date | None = None
             )
 
             if has_retrieval and retrieval_type:
+                candidate.retrieval_status = RetrievalStatus.authorized_direct
+                candidate.discovery_status = DiscoveryStatus.accepted
+                db.add(candidate)
+                await db.flush()
                 adapter_record = RetrievalAdapter(
                     candidate_asset_id=candidate.id,
                     adapter_type=AdapterType(retrieval_type),
                     adapter_spec={"url": source_url},
                 )
                 db.add(adapter_record)
+                await db.flush()
                 candidate.retrieval_adapter_id = adapter_record.id
-                candidate.retrieval_status = RetrievalStatus.authorized_direct
-                candidate.discovery_status = DiscoveryStatus.accepted
                 total_accepted += 1
             else:
                 candidate.retrieval_status = RetrievalStatus.metadata_only

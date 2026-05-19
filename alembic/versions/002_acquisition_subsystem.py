@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from alembic import op
 
 revision = "002_acquisition"
-down_revision = "001_initial_schema"
+down_revision = "001"
 branch_labels = None
 depends_on = None
 
