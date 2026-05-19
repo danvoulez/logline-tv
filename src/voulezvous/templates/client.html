@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>voulezvous.tv</title>
+  <link rel="stylesheet" href="/static/css/client.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="player-container">
+    <div class="video-wrapper">
+      <video id="player" playsinline></video>
+      <div class="play-overlay" id="playOverlay">
+        <div class="play-btn">
+          <svg viewBox="0 0 24 24"><polygon points="8,5 19,12 8,19"/></svg>
+        </div>
+      </div>
+      <div class="now-playing" id="nowPlaying">
+        <span class="status-dot live" id="statusDot"></span>
+        <span class="now-playing-title" id="nowPlayingTitle">Loading...</span>
+      </div>
+    </div>
+    <div class="brand">
+      <div id="brandLogo"></div>
+      <div class="brand-name">voulezvous</div>
+      <div class="brand-sub">.tv</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script>
+    const video = document.getElementById('player');
+    const overlay = document.getElementById('playOverlay');
+    const titleEl = document.getElementById('nowPlayingTitle');
+    const statusDot = document.getElementById('statusDot');
+
+    const HLS_URL = '/hls/stream.m3u8';
+    let hls = null;
+
+    function initPlayer() {
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 6,
+          enableWorker: true,
+        });
+        hls.loadSource(HLS_URL);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {});
+        });
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal) {
+            statusDot.className = 'status-dot offline';
+            titleEl.textContent = 'Stream offline — retrying...';
+            setTimeout(() => { hls.loadSource(HLS_URL); }, 5000);
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = HLS_URL;
+        video.addEventListener('loadedmetadata', () => { video.play(); });
+      }
+    }
+
+    overlay.addEventListener('click', () => {
+      overlay.classList.add('hidden');
+      initPlayer();
+    });
+
+    // Poll stream status
+    async function pollStatus() {
+      try {
+        const res = await fetch('/stream/status');
+        const data = await res.json();
+        if (data.running) {
+          statusDot.className = 'status-dot live';
+          titleEl.textContent = 'Live';
+        } else {
+          statusDot.className = 'status-dot offline';
+          titleEl.textContent = 'Off air';
+        }
+      } catch { /* ignore */ }
+    }
+
+    setInterval(pollStatus, 10000);
+    pollStatus();
+  </script>
+</body>
+</html>

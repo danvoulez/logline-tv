@@ -1,0 +1,151 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  color: #fff;
+  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  overflow: hidden;
+}
+
+.player-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.video-wrapper {
+  position: relative;
+  width: 90vw;
+  max-width: 1600px;
+  aspect-ratio: 16 / 9;
+  background: #1a1a1a;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-wrapper video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #1a1a1a;
+}
+
+.play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.3);
+  transition: opacity 0.3s ease;
+}
+
+.play-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.play-btn {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: #FF1493;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 0 40px rgba(255, 20, 147, 0.4);
+}
+
+.play-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 60px rgba(255, 20, 147, 0.6);
+}
+
+.play-btn svg {
+  width: 40px;
+  height: 40px;
+  fill: #fff;
+  margin-left: 6px;
+}
+
+.brand {
+  margin-top: 24px;
+  text-align: center;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.brand:hover { opacity: 1; }
+
+.brand-name {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: #FF1493;
+}
+
+.brand-sub {
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #666;
+  margin-top: 4px;
+}
+
+.brand-logo {
+  max-height: 40px;
+  margin-bottom: 8px;
+}
+
+.now-playing {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 20px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.8));
+  font-size: 13px;
+  color: #ccc;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.video-wrapper:hover .now-playing {
+  opacity: 1;
+}
+
+.now-playing-title {
+  font-weight: 600;
+  color: #FF1493;
+}
+
+/* Status indicator */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.status-dot.live { background: #FF1493; animation: pulse 2s infinite; }
+.status-dot.offline { background: #444; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
