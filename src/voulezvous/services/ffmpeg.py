@@ -10,7 +10,7 @@ logger = structlog.get_logger()
 
 
 async def run_ffmpeg(args: list[str]) -> tuple[int, str, str]:
-    cmd = [settings.ffmpeg_path] + args
+    cmd = [settings.ffmpeg_path, "-loglevel", "warning"] + args
     logger.info("ffmpeg_run", cmd=" ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -50,7 +50,7 @@ async def mix_audio(
     args = [
         "-y",
         "-i", str(video_path),
-        "-i", str(music_path),
+        "-stream_loop", "-1", "-i", str(music_path),
         "-filter_complex",
         f"[0:a]volume={video_gain}[va];[1:a]volume={music_gain}[ma];"
         f"[va][ma]amix=inputs=2:duration=first:dropout_transition=2[aout]",

@@ -22,7 +22,7 @@ from voulezvous.acquisition.models import (
     DomainPolicy,
     SearchKeyword,
 )
-from voulezvous.models.enums import PlanStatus, RightsStatus, StreamItemStatus
+from voulezvous.models.enums import PlanStatus, PrepStatus, RightsStatus, StreamItemStatus
 from voulezvous.models.tables import (
     DirectorAction,
     LibraryAsset,
@@ -63,6 +63,7 @@ async def compact_state(db: AsyncSession) -> dict:
                 )
             )
             .where(StreamPlanItem.stream_status == StreamItemStatus.queued)
+            .where(StreamPlanItem.prep_status != PrepStatus.failed)
         )
     ).scalar_one() or 0
 

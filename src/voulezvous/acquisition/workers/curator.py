@@ -350,11 +350,12 @@ async def _try_llm_polish(items: list[LineupItem]) -> list[dict]:
             slot_types[st] = slot_types.get(st, 0) + 1
         summary += f"Slot distribution (first 20): {slot_types}"
 
+        from voulezvous.config import settings as _settings
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
-                "http://localhost:11434/api/generate",
+                f"{_settings.local_llm_url}/api/generate",
                 json={
-                    "model": "llama3.2",
+                    "model": _settings.ollama_model,
                     "prompt": (
                         f"Review this TV lineup and suggest improvements. {summary} "
                         f"Only suggest: swap_item, move_item, insert_buffer, "

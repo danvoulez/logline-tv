@@ -13,8 +13,9 @@ from .tool_types import (
 
 logger = structlog.get_logger()
 
-# In-memory audit log for current session
+# In-memory audit log — capped to prevent unbounded growth
 _audit_log: list[ToolAuditEntry] = []
+_AUDIT_LOG_MAX = 500
 
 
 TOOL_REQUEST_TYPES = {
@@ -61,6 +62,8 @@ def record_audit(verb: ToolVerb, request_data: dict, response_data: dict,
         error=error,
     )
     _audit_log.append(entry)
+    if len(_audit_log) > _AUDIT_LOG_MAX:
+        del _audit_log[:_AUDIT_LOG_MAX // 2]
     logger.info("tool_audit", verb=verb.value, success=success, error=error)
 
 

@@ -84,7 +84,7 @@ async def _adjust_keyword_priorities(
                 "reason": "Found nothing",
             })
 
-    await db.flush()
+    await db.commit()
     return {"adjustments": adjustments}
 
 

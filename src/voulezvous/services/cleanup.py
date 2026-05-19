@@ -64,15 +64,17 @@ async def cleanup_orphan_prepared(db: AsyncSession) -> dict:
     if not spool.exists():
         return {"scanned": 0, "deleted": 0, "freed_bytes": 0}
 
+    active_statuses = [StreamItemStatus.queued, StreamItemStatus.streaming]
+    if not settings.delete_after_stream:
+        active_statuses.append(StreamItemStatus.completed)
+
     referenced = {
         str(p) for p in (
             await db.execute(
                 select(StreamPlanItem.prepared_file_path).where(
                     StreamPlanItem.prepared_file_path.isnot(None)
                 ).where(
-                    StreamPlanItem.stream_status.in_(
-                        [StreamItemStatus.queued, StreamItemStatus.streaming]
-                    )
+                    StreamPlanItem.stream_status.in_(active_statuses)
                 )
             )
         ).scalars().all()

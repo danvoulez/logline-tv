@@ -1,5 +1,11 @@
 const API = '';
 
+function apiFetch(url, opts = {}) {
+  const token = document.querySelector('meta[name="admin-token"]')?.content;
+  if (token) opts.headers = { ...(opts.headers || {}), 'Authorization': 'Bearer ' + token };
+  return fetch(API + url, opts);
+}
+
 // --- Navigation ---
 document.querySelectorAll('.nav-item[data-page]').forEach(item => {
   item.addEventListener('click', () => {
@@ -85,7 +91,7 @@ function statusBadge(status) {
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(API + path, opts);
+  const res = await apiFetch(path, opts);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || res.statusText);

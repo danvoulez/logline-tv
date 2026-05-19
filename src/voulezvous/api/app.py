@@ -66,6 +66,23 @@ class _MCPTokenMiddleware(BaseHTTPMiddleware):
 
 _mcp_http.add_middleware(_MCPTokenMiddleware)
 
+_PUBLIC_PREFIXES = ("/hls/", "/static/")
+_PUBLIC_EXACT = {"/", "/admin", "/health"}
+
+
+class _APITokenMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        token = settings.admin_token
+        if not token:
+            return await call_next(request)
+        path = request.url.path
+        if path in _PUBLIC_EXACT or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
+            return await call_next(request)
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {token}":
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -77,6 +94,7 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Voulezvous Streaming Engine", version="0.2.0", lifespan=_lifespan)
+app.add_middleware(_APITokenMiddleware)
 
 # Static files and templates
 _pkg_dir = Path(__file__).resolve().parent.parent
@@ -118,4 +136,4 @@ async def client_page(request: Request):
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    return templates.TemplateResponse(request, "admin.html")
+    return templates.TemplateResponse(request, "admin.html", {"admin_token": settings.admin_token})
