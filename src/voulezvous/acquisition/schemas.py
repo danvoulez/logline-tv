@@ -31,6 +31,30 @@ class DomainPolicyCreate(BaseModel):
     max_pages_per_run: int = 5
     notes: str | None = None
 
+    # Extraction / templates / selectors
+    search_url_template: str | None = None
+    user_url_template: str | None = None
+    result_selector: str | None = None
+    title_selector: str | None = None
+
+    # Login flow
+    login_url: str | None = None
+    login_email_selector: str | None = None
+    login_password_selector: str | None = None
+    login_submit_selector: str | None = None
+    login_success_selector: str | None = None
+
+    # Credentials (stored in DB; password kept out of __repr__)
+    credential_email: str | None = None
+    credential_password: str | None = Field(default=None, repr=False)
+
+    # Retrieval classification hints
+    accepted_extensions: list[str] = Field(default_factory=lambda: ["mp4", "webm", "m3u8", "mpd"])
+    is_adult: bool = False
+    requires_login: bool = False
+    needs_media_interception: bool = False
+    title_suffix_strips: list[str] = Field(default_factory=list)
+
 
 class DomainPolicyUpdate(BaseModel):
     is_enabled: bool | None = None
@@ -42,6 +66,26 @@ class DomainPolicyUpdate(BaseModel):
     quality_floor: str | None = None
     max_pages_per_run: int | None = None
     notes: str | None = None
+
+    search_url_template: str | None = None
+    user_url_template: str | None = None
+    result_selector: str | None = None
+    title_selector: str | None = None
+
+    login_url: str | None = None
+    login_email_selector: str | None = None
+    login_password_selector: str | None = None
+    login_submit_selector: str | None = None
+    login_success_selector: str | None = None
+
+    credential_email: str | None = None
+    credential_password: str | None = Field(default=None, repr=False)
+
+    accepted_extensions: list[str] | None = None
+    is_adult: bool | None = None
+    requires_login: bool | None = None
+    needs_media_interception: bool | None = None
+    title_suffix_strips: list[str] | None = None
 
 
 class DomainPolicyOut(BaseModel):
@@ -56,6 +100,27 @@ class DomainPolicyOut(BaseModel):
     quality_floor: str | None
     max_pages_per_run: int
     notes: str | None
+
+    search_url_template: str | None = None
+    user_url_template: str | None = None
+    result_selector: str | None = None
+    title_selector: str | None = None
+
+    login_url: str | None = None
+    login_email_selector: str | None = None
+    login_password_selector: str | None = None
+    login_submit_selector: str | None = None
+    login_success_selector: str | None = None
+
+    credential_email: str | None = None
+    # credential_password NEVER returned by API
+
+    accepted_extensions: list | dict = Field(default_factory=list)
+    is_adult: bool = False
+    requires_login: bool = False
+    needs_media_interception: bool = False
+    title_suffix_strips: list | dict = Field(default_factory=list)
+
     created_at: datetime
     updated_at: datetime
 

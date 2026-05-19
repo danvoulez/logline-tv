@@ -113,33 +113,9 @@
           <div class="card-header">
             <span class="card-title">Search Domains</span>
             <span class="badge badge-blue" id="domainCount">0</span>
+            <button class="btn btn-primary btn-sm" onclick="openDomainModal()">+ Add Site</button>
           </div>
-          <div class="form-group">
-            <label>Domain</label>
-            <input class="form-control" id="domainName" placeholder="archive.org">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Max pages</label>
-              <input class="form-control" id="domainPages" type="number" value="5" min="1" max="20">
-            </div>
-            <div class="form-group">
-              <label>Mode</label>
-              <select class="form-control" id="domainMode">
-                <option value="keyword_search">Keyword search</option>
-              </select>
-            </div>
-          </div>
-          <label class="check-row">
-            <input type="checkbox" id="domainEnabled" checked>
-            Enabled for discovery
-          </label>
-          <button class="btn btn-primary full-width" onclick="createDomainPolicy()">Add Domain</button>
-          <div class="quick-domains">
-            <button class="btn btn-secondary btn-sm" onclick="presetDomain('archive.org')">archive.org</button>
-            <button class="btn btn-secondary btn-sm" onclick="presetDomain('vimeo.com')">vimeo.com</button>
-            <button class="btn btn-secondary btn-sm" onclick="presetDomain('pexels.com')">pexels.com</button>
-          </div>
+          <p class="muted" style="margin:0 0 10px 0">Cadastre sites (porn ou não) com selectors, login e credenciais. Edite ou apague qualquer hora.</p>
           <div class="list-panel" id="domainsList"></div>
         </div>
       </div>
@@ -278,8 +254,105 @@
   </div>
 </div>
 
+<!-- Site (Domain) Modal -->
+<div class="modal-backdrop" id="domainModal">
+  <div class="modal modal-wide">
+    <h3 id="domainModalTitle">Add Site</h3>
+    <input type="hidden" id="domainEditId">
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Domain *</label>
+        <input class="form-control" id="domainName" placeholder="example.com">
+      </div>
+      <div class="form-group">
+        <label>Max pages per run</label>
+        <input class="form-control" id="domainPages" type="number" value="5" min="1" max="50">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="check-row"><input type="checkbox" id="domainEnabled" checked> Enabled</label>
+      <label class="check-row"><input type="checkbox" id="domainIsAdult"> 🔞 Adult site</label>
+      <label class="check-row"><input type="checkbox" id="domainRequiresLogin"> Requires login</label>
+      <label class="check-row"><input type="checkbox" id="domainNeedsIntercept"> Capture media via network</label>
+    </div>
+
+    <h4 class="modal-section">Search & Browse</h4>
+    <div class="form-group">
+      <label>Search URL template <span class="muted">(use {domain}, {query}, {query_dashed})</span></label>
+      <input class="form-control" id="domainSearchTpl" placeholder="https://{domain}/?k={query}">
+    </div>
+    <div class="form-group">
+      <label>User/profile URL template <span class="muted">(use {domain}, {username})</span></label>
+      <input class="form-control" id="domainUserTpl" placeholder="https://{domain}/profiles/{username}">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Result selector (CSS)</label>
+        <input class="form-control" id="domainResultSel" placeholder=".thumb-block a.thumb">
+      </div>
+      <div class="form-group">
+        <label>Title selector (CSS)</label>
+        <input class="form-control" id="domainTitleSel" placeholder="h1, .video-title">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Accepted file extensions <span class="muted">(comma-separated)</span></label>
+      <input class="form-control" id="domainExts" placeholder="mp4, webm, m3u8">
+    </div>
+    <div class="form-group">
+      <label>Title suffix strips <span class="muted">(comma-separated, removed from end of title)</span></label>
+      <input class="form-control" id="domainTitleStrips" placeholder=" - XVIDEOS.COM,  | example.com">
+    </div>
+
+    <h4 class="modal-section">Login (only if Requires login)</h4>
+    <div class="form-group">
+      <label>Login URL</label>
+      <input class="form-control" id="domainLoginUrl" placeholder="https://example.com/login">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email selector</label>
+        <input class="form-control" id="domainLoginEmailSel" placeholder="input[name='username']">
+      </div>
+      <div class="form-group">
+        <label>Password selector</label>
+        <input class="form-control" id="domainLoginPassSel" placeholder="input[type='password']">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Submit selector</label>
+        <input class="form-control" id="domainLoginSubmitSel" placeholder="button[type='submit']">
+      </div>
+      <div class="form-group">
+        <label>Success indicator selector</label>
+        <input class="form-control" id="domainLoginSuccessSel" placeholder=".logged-menu">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email / username</label>
+        <input class="form-control" id="domainCredEmail" placeholder="user@example.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input class="form-control" id="domainCredPass" type="password" placeholder="••••••••">
+      </div>
+    </div>
+    <p class="muted">Credenciais ficam no Postgres do LAB. A senha nunca volta pelo GET.</p>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('domainModal')">Cancel</button>
+      <button class="btn btn-danger" id="domainDeleteBtn" style="display:none" onclick="deleteDomainFromModal()">Delete</button>
+      <button class="btn btn-primary" onclick="saveDomain()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toasts"></div>
 
-<script src="/static/js/admin.js?v=20260519-discovery2"></script>
+<script src="/static/js/admin.js?v=20260519-domains2"></script>
 </body>
 </html>

@@ -4,17 +4,8 @@ x-logging: &default-logging
     max-size: "50m"
     max-file: "3"
 
-x-adult-env: &adult-env
-  XVIDEOS_EMAIL: ${XVIDEOS_EMAIL:-}
-  XVIDEOS_PASSWORD: ${XVIDEOS_PASSWORD:-}
-  PORNHUB_EMAIL: ${PORNHUB_EMAIL:-}
-  PORNHUB_PASSWORD: ${PORNHUB_PASSWORD:-}
-  GAYBOYFRIENDTV_EMAIL: ${GAYBOYFRIENDTV_EMAIL:-}
-  GAYBOYFRIENDTV_PASSWORD: ${GAYBOYFRIENDTV_PASSWORD:-}
-  FABHUSE_EMAIL: ${FABHUSE_EMAIL:-}
-  FABHUSE_PASSWORD: ${FABHUSE_PASSWORD:-}
-  ADULT_FOLLOW_USER: ${ADULT_FOLLOW_USER:-CompactTreasure240}
-  LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://192.168.5.2:11434}
+x-acq-env: &acq-env
+  LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:11434}
   OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
   PEXELS_API_KEY: ${PEXELS_API_KEY:-}
   BROWSER_PROFILES_DIR: ${BROWSER_PROFILES_DIR:-/spool/browser_profiles}
@@ -64,9 +55,10 @@ services:
       DELETE_AFTER_STREAM: ${DELETE_AFTER_STREAM:-true}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      <<: *adult-env
+      <<: *acq-env
     volumes:
       - spool:/spool
+      - browser_profiles:/spool/browser_profiles
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -111,19 +103,8 @@ services:
         condition: service_completed_successfully
     logging: *default-logging
 
-  # Acquisition subsystem — seed + orchestrator run
-  acq-seed:
-    build: .
-    command: app seed-acquisition-data
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
-      DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    profiles: ["acq"]
-    logging: *default-logging
-
+  # Acquisition orchestrator — runs only when profile=acq is enabled.
+  # Banco começa vazio: você cadastra sites/keywords pelo /admin antes de rodar.
   acq-orchestrator:
     build: .
     command: app orchestrator run-daily
@@ -132,7 +113,7 @@ services:
       DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
       SPOOL_ROOT: ${SPOOL_ROOT:-/spool}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      <<: *adult-env
+      <<: *acq-env
     volumes:
       - spool:/spool
       - browser_profiles:/spool/browser_profiles

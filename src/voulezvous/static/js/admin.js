@@ -76,7 +76,9 @@ async function api(method, path, body) {
     const text = await res.text();
     throw new Error(text || res.statusText);
   }
-  return res.json();
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 // --- Dashboard ---
@@ -297,19 +299,27 @@ async function loadDomainPolicies() {
     document.getElementById('domainCount').textContent = domains.length;
     let html = '';
     if (!domains.length) {
-      html = '<div class="empty-state compact"><p>No search domains yet</p></div>';
+      html = '<div class="empty-state compact"><p>Nenhum site cadastrado ainda. Clique em + Add Site.</p></div>';
     } else {
       html = '<div class="stack-list">';
       for (const d of domains) {
+        const adultIcon = d.is_adult ? '<span class="adult-icon">🔞</span> ' : '';
+        const loginLabel = d.requires_login ? (d.credential_email ? '🔑 logged' : '🔑 no creds') : '';
+        const hasTpl = d.search_url_template || d.user_url_template;
         html += `
           <div class="stack-item">
             <div>
-              <strong>${escapeHtml(d.domain)}</strong>
-              <div class="muted">${escapeHtml(d.search_mode)} · ${d.max_pages_per_run} pages/run</div>
+              <strong>${adultIcon}${escapeHtml(d.domain)}</strong>
+              <div class="muted">
+                ${d.max_pages_per_run} pages/run
+                ${hasTpl ? '· tpl ok' : '· <span style="color:#c33">no template</span>'}
+                ${loginLabel ? '· ' + loginLabel : ''}
+              </div>
             </div>
             <div class="inline-actions">
               ${badge(d.is_enabled ? 'enabled' : 'off', d.is_enabled ? 'green' : 'grey')}
-              <button class="btn btn-secondary btn-sm" onclick="toggleDomain('${d.id}', ${!d.is_enabled})">${d.is_enabled ? 'Disable' : 'Enable'}</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleDomain('${d.id}', ${!d.is_enabled})">${d.is_enabled ? 'Pause' : 'Enable'}</button>
+              <button class="btn btn-secondary btn-sm" onclick="openDomainModalEdit('${d.id}')">Edit</button>
             </div>
           </div>
         `;
@@ -322,39 +332,140 @@ async function loadDomainPolicies() {
   }
 }
 
-function presetDomain(domain) {
-  document.getElementById('domainName').value = domain;
+function _clearDomainModal() {
+  const ids = [
+    'domainEditId', 'domainName', 'domainPages',
+    'domainSearchTpl', 'domainUserTpl',
+    'domainResultSel', 'domainTitleSel',
+    'domainExts', 'domainTitleStrips',
+    'domainLoginUrl', 'domainLoginEmailSel', 'domainLoginPassSel',
+    'domainLoginSubmitSel', 'domainLoginSuccessSel',
+    'domainCredEmail', 'domainCredPass',
+  ];
+  for (const id of ids) document.getElementById(id).value = '';
+  document.getElementById('domainEnabled').checked = true;
+  document.getElementById('domainIsAdult').checked = false;
+  document.getElementById('domainRequiresLogin').checked = false;
+  document.getElementById('domainNeedsIntercept').checked = false;
+  document.getElementById('domainPages').value = '5';
+  document.getElementById('domainExts').value = 'mp4, webm, m3u8';
 }
 
-async function createDomainPolicy() {
-  const domain = document.getElementById('domainName').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-  if (!domain) { toast('Domain is required', 'error'); return; }
+function openDomainModal() {
+  _clearDomainModal();
+  document.getElementById('domainModalTitle').textContent = 'Add Site';
+  document.getElementById('domainDeleteBtn').style.display = 'none';
+  showModal('domainModal');
+}
+
+async function openDomainModalEdit(id) {
+  _clearDomainModal();
+  try {
+    const d = await api('GET', '/domain-policies/' + id);
+    document.getElementById('domainModalTitle').textContent = 'Edit Site — ' + d.domain;
+    document.getElementById('domainEditId').value = d.id;
+    document.getElementById('domainName').value = d.domain;
+    document.getElementById('domainPages').value = d.max_pages_per_run || 5;
+    document.getElementById('domainEnabled').checked = !!d.is_enabled;
+    document.getElementById('domainIsAdult').checked = !!d.is_adult;
+    document.getElementById('domainRequiresLogin').checked = !!d.requires_login;
+    document.getElementById('domainNeedsIntercept').checked = !!d.needs_media_interception;
+    document.getElementById('domainSearchTpl').value = d.search_url_template || '';
+    document.getElementById('domainUserTpl').value = d.user_url_template || '';
+    document.getElementById('domainResultSel').value = d.result_selector || '';
+    document.getElementById('domainTitleSel').value = d.title_selector || '';
+    document.getElementById('domainExts').value = (d.accepted_extensions || []).join(', ');
+    document.getElementById('domainTitleStrips').value = (d.title_suffix_strips || []).join(', ');
+    document.getElementById('domainLoginUrl').value = d.login_url || '';
+    document.getElementById('domainLoginEmailSel').value = d.login_email_selector || '';
+    document.getElementById('domainLoginPassSel').value = d.login_password_selector || '';
+    document.getElementById('domainLoginSubmitSel').value = d.login_submit_selector || '';
+    document.getElementById('domainLoginSuccessSel').value = d.login_success_selector || '';
+    document.getElementById('domainCredEmail').value = d.credential_email || '';
+    // password is never returned by API — leave blank
+    document.getElementById('domainDeleteBtn').style.display = '';
+    showModal('domainModal');
+  } catch (e) {
+    toast('Failed to load site: ' + e.message, 'error');
+  }
+}
+
+function _parseCsvList(value) {
+  return (value || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+async function saveDomain() {
+  const id = document.getElementById('domainEditId').value;
+  const domain = document.getElementById('domainName').value.trim()
+    .replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (!domain) { toast('Domain é obrigatório', 'error'); return; }
+
+  const exts = _parseCsvList(document.getElementById('domainExts').value);
+  const strips = _parseCsvList(document.getElementById('domainTitleStrips').value);
+  const pass = document.getElementById('domainCredPass').value;
+
   const body = {
     domain,
     is_enabled: document.getElementById('domainEnabled').checked,
-    search_mode: document.getElementById('domainMode').value,
-    retrieval_modes: ['official_download', 'direct_url'],
-    requires_playback_verification: false,
+    is_adult: document.getElementById('domainIsAdult').checked,
+    requires_login: document.getElementById('domainRequiresLogin').checked,
+    needs_media_interception: document.getElementById('domainNeedsIntercept').checked,
     max_pages_per_run: parseInt(document.getElementById('domainPages').value || '5'),
-    notes: domain === 'archive.org' ? 'Public domain and downloadable media search' : 'Operator-approved discovery domain',
+    search_url_template: document.getElementById('domainSearchTpl').value.trim() || null,
+    user_url_template: document.getElementById('domainUserTpl').value.trim() || null,
+    result_selector: document.getElementById('domainResultSel').value.trim() || null,
+    title_selector: document.getElementById('domainTitleSel').value.trim() || null,
+    accepted_extensions: exts.length ? exts : ['mp4', 'webm', 'm3u8', 'mpd'],
+    title_suffix_strips: strips,
+    login_url: document.getElementById('domainLoginUrl').value.trim() || null,
+    login_email_selector: document.getElementById('domainLoginEmailSel').value.trim() || null,
+    login_password_selector: document.getElementById('domainLoginPassSel').value.trim() || null,
+    login_submit_selector: document.getElementById('domainLoginSubmitSel').value.trim() || null,
+    login_success_selector: document.getElementById('domainLoginSuccessSel').value.trim() || null,
+    credential_email: document.getElementById('domainCredEmail').value.trim() || null,
   };
+  // Only send password if user actually typed something (otherwise keeps old value)
+  if (pass) body.credential_password = pass;
+
   try {
-    await api('POST', '/domain-policies', body);
-    toast('Domain added');
-    document.getElementById('domainName').value = '';
+    if (id) {
+      await api('PATCH', '/domain-policies/' + id, body);
+      toast('Site atualizado');
+    } else {
+      await api('POST', '/domain-policies', body);
+      toast('Site adicionado');
+    }
+    closeModal('domainModal');
     loadDomainPolicies();
   } catch (e) {
-    toast('Domain error: ' + e.message, 'error');
+    toast('Erro ao salvar: ' + e.message, 'error');
+  }
+}
+
+async function deleteDomainFromModal() {
+  const id = document.getElementById('domainEditId').value;
+  if (!id) return;
+  if (!confirm('Apagar este site? Essa ação não tem volta.')) return;
+  try {
+    await api('DELETE', '/domain-policies/' + id);
+    toast('Site removido');
+    closeModal('domainModal');
+    loadDomainPolicies();
+  } catch (e) {
+    toast('Erro ao apagar: ' + e.message, 'error');
   }
 }
 
 async function toggleDomain(id, isEnabled) {
   try {
     await api('PATCH', '/domain-policies/' + id, { is_enabled: isEnabled });
-    toast(isEnabled ? 'Domain enabled' : 'Domain disabled');
+    toast(isEnabled ? 'Site ativado' : 'Site pausado');
     loadDomainPolicies();
   } catch (e) {
-    toast('Domain error: ' + e.message, 'error');
+    toast('Erro: ' + e.message, 'error');
   }
 }
 

@@ -15,11 +15,7 @@ Covers:
 import uuid
 from datetime import date, datetime, timezone
 
-from voulezvous.acquisition.browser.adapters import (
-    GenericVideoAdapter,
-    InternetArchiveAdapter,
-    get_adapter_for_domain,
-)
+from voulezvous.acquisition.browser.adapters import DBAdapter
 from voulezvous.acquisition.enums import (
     LineupStatus,
     SlotType,
@@ -27,6 +23,7 @@ from voulezvous.acquisition.enums import (
 from voulezvous.acquisition.models import (
     CandidateAsset,
     DiscoveryRun,
+    DomainPolicy,
     LineupItem,
 )
 from voulezvous.acquisition.tools.executor import validate_tool_call
@@ -34,39 +31,66 @@ from voulezvous.acquisition.tools.tool_types import ToolVerb
 from voulezvous.acquisition.workers.enrichment import enrich_deterministic
 from voulezvous.acquisition.workers.media_ir import build_ir_for_item
 
-# ---- Test 1: Domain policy enforcement ----
 
-def test_domain_policy_enforcement():
-    """Only enabled domains with correct search_mode are used."""
-    adapter = get_adapter_for_domain("archive.org")
-    assert isinstance(adapter, InternetArchiveAdapter)
+def _policy(**kwargs):
+    """Build an in-memory DomainPolicy with the given attrs."""
+    defaults = dict(
+        domain="example.com",
+        is_enabled=True,
+        accepted_extensions=["mp4", "webm"],
+        is_adult=False,
+        requires_login=False,
+        needs_media_interception=False,
+        title_suffix_strips=[],
+    )
+    defaults.update(kwargs)
+    return DomainPolicy(**defaults)
 
-    generic = get_adapter_for_domain("unknown-site.com")
-    assert isinstance(generic, GenericVideoAdapter)
+
+# ---- Test 1: DBAdapter builds URLs from templates ----
+
+def test_db_adapter_builds_search_url():
+    p = _policy(
+        domain="archive.org",
+        search_url_template="https://{domain}/search?q={query}&mediatype=movies",
+    )
+    adapter = DBAdapter(p)
+    url = adapter.build_search_url("jazz live")
+    assert url == "https://archive.org/search?q=jazz+live&mediatype=movies"
+
+
+def test_db_adapter_returns_none_without_template():
+    adapter = DBAdapter(_policy())
+    assert adapter.build_search_url("anything") is None
 
 
 # ---- Test 2: Retrieval authorization gate ----
 
 def test_retrieval_authorization_gate():
-    """Only authorized retrieval paths are accepted."""
-    archive = InternetArchiveAdapter()
+    """Only URLs matching accepted_extensions classify as authorized."""
+    adapter = DBAdapter(_policy(accepted_extensions=["mp4", "webm"]))
 
-    # Official download URL — authorized
-    ok, rtype = archive.classify_retrieval(
+    ok, rtype = adapter.classify_retrieval(
         "https://archive.org/download/test/video.mp4", {}
     )
     assert ok is True
-    assert rtype == "official_download"
+    assert rtype == "direct_url"
 
-    # Random URL — not authorized
-    ok2, rtype2 = archive.classify_retrieval(
-        "https://shady-site.com/video.mp4", {}
-    )
+    ok2, _ = adapter.classify_retrieval("https://site.com/page.html", {})
     assert ok2 is False
 
-    # No URL — not authorized
-    ok3, rtype3 = archive.classify_retrieval(None, {})
+    ok3, _ = adapter.classify_retrieval(None, {})
     assert ok3 is False
+
+
+def test_retrieval_via_media_interception():
+    """needs_media_interception accepts intercepted media as authorized."""
+    adapter = DBAdapter(_policy(needs_media_interception=True))
+    ok, rtype = adapter.classify_retrieval(
+        "https://tube.example/v/abc", {"intercepted_media": True}
+    )
+    assert ok is True
+    assert rtype == "official_download"
 
 
 # ---- Test 3: Discovery persistence ----
@@ -86,19 +110,18 @@ def test_discovery_run_model():
 # ---- Test 4: metadata_only behavior ----
 
 def test_metadata_only_when_no_authorized_retrieval():
-    """Candidates without authorized retrieval path get metadata_only status."""
-    from voulezvous.acquisition.browser.adapters import VimeoAdapter
+    """A domain with requires_login but no download button stays metadata-only."""
+    adapter = DBAdapter(_policy(requires_login=True, accepted_extensions=[]))
 
-    vimeo = VimeoAdapter()
-    ok, rtype = vimeo.classify_retrieval(
-        "https://player.vimeo.com/video/12345", {}
+    ok, rtype = adapter.classify_retrieval(
+        "https://player.example/video/12345", {}
     )
     assert ok is False
     assert rtype is None
 
-    # With download button
-    ok2, rtype2 = vimeo.classify_retrieval(
-        "https://vimeo.com/12345/download", {"has_download_button": True}
+    # With download button visible after login — authorized
+    ok2, rtype2 = adapter.classify_retrieval(
+        "https://example.com/12345/download", {"has_download_button": True}
     )
     assert ok2 is True
     assert rtype2 == "official_download"

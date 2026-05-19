@@ -60,3 +60,18 @@ async def update_domain_policy(
     await db.commit()
     await db.refresh(policy)
     return policy
+
+
+@router.delete("/{policy_id}", status_code=204)
+async def delete_domain_policy(
+    policy_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+):
+    policy = (await db.execute(
+        select(DomainPolicy).where(DomainPolicy.id == policy_id)
+    )).scalar_one_or_none()
+    if not policy:
+        raise HTTPException(404, "Domain policy not found")
+
+    await db.delete(policy)
+    await db.commit()
+    return None
