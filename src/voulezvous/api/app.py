@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -47,7 +48,35 @@ from voulezvous.logging_config import setup_logging
 
 setup_logging()
 
-app = FastAPI(title="Voulezvous Streaming Engine", version="0.2.0")
+# Import MCP early so http_app() is created before FastAPI constructor
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
+from starlette.responses import JSONResponse  # noqa: E402
+from voulezvous.mcp.server import mcp as _mcp_server  # noqa: E402
+
+_mcp_http = _mcp_server.http_app(path="/")
+
+class _MCPTokenMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        token = settings.admin_token
+        if token:
+            auth = request.headers.get("Authorization", "")
+            if auth != f"Bearer {token}":
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+
+_mcp_http.add_middleware(_MCPTokenMiddleware)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    import asyncio
+    from voulezvous.services.bootstrap import run_boot_tasks
+    async with _mcp_http.router.lifespan_context(app):
+        asyncio.create_task(run_boot_tasks())
+        yield
+
+
+app = FastAPI(title="Voulezvous Streaming Engine", version="0.2.0", lifespan=_lifespan)
 
 # Static files and templates
 _pkg_dir = Path(__file__).resolve().parent.parent
@@ -79,14 +108,7 @@ app.include_router(acq_media_ir.router)
 app.include_router(acq_reports.router, prefix="/acq")
 app.include_router(acq_bridge.router)
 
-
-@app.on_event("startup")
-async def _on_startup() -> None:
-    from voulezvous.services.bootstrap import run_boot_tasks
-
-    # fire-and-forget; FFmpeg takes a few seconds and we don't want to block /health
-    import asyncio
-    asyncio.create_task(run_boot_tasks())
+app.mount("/mcp", _mcp_http)  # MCP — ChatGPT connects here
 
 
 @app.get("/", response_class=HTMLResponse)

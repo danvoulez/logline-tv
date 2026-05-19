@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>voulezvous — admin</title>
-  <link rel="stylesheet" href="/static/css/admin.css?v=20260519-obs1">
+  <link rel="stylesheet" href="/static/css/admin.css?v=20260519-v2">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -39,7 +39,7 @@
         <div id="streamStatus">Loading...</div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Recent Assets</span></div>
+        <div class="card-header"><span class="card-title">Candidatos Pendentes</span></div>
         <div class="table-wrap" id="recentAssetsTable"></div>
       </div>
     </section>
@@ -74,11 +74,10 @@
       <div class="page-header">
         <div>
           <h2>Discovery</h2>
-          <p class="page-subtitle">Tell the channel what to look for, where to search, then promote good finds into the video library.</p>
+          <p class="page-subtitle">Cadastre sites e keywords. O Diretor roda buscas automaticamente a cada 6h.</p>
         </div>
         <div class="header-actions">
           <button class="btn btn-secondary" onclick="loadDiscovery()">Refresh</button>
-          <button class="btn btn-primary" onclick="runDiscovery(false)">Run Search</button>
         </div>
       </div>
 
@@ -125,8 +124,10 @@
         <div class="card-header">
           <span class="card-title">Discovery Runs</span>
           <div class="header-actions">
-            <button class="btn btn-secondary btn-sm" onclick="runDiscovery(true)">Test Mode</button>
-            <button class="btn btn-primary btn-sm" onclick="runDiscovery(false)">Run Real Search</button>
+            <label class="check-row" style="font-size:12px">
+              <input type="checkbox" id="discoveryTestMode"> Simulado
+            </label>
+            <button class="btn btn-primary btn-sm" onclick="runDiscovery(document.getElementById('discoveryTestMode').checked)">Run Search</button>
           </div>
         </div>
         <div id="discoveryRuns"></div>
@@ -166,16 +167,9 @@
 
     <!-- Reports -->
     <section id="page-reports" style="display:none">
-      <div class="page-header"><h2>Reports</h2></div>
-      <div class="card">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-          <input type="date" class="form-control" id="reportDate" style="width:auto">
-          <button class="btn btn-primary btn-sm" onclick="loadReport()">Load Report</button>
-          <button class="btn btn-secondary btn-sm" onclick="generateReport()">Generate Now</button>
-        </div>
-        <div id="reportContent">
-          <div class="empty-state"><p>Select a date to view a report</p></div>
-        </div>
+      <div class="page-header"><h2>Relatórios</h2></div>
+      <div id="reportsContent">
+        <div class="empty-state"><p>Carregando...</p></div>
       </div>
     </section>
 
@@ -383,6 +377,6 @@
 
 <div class="toast-container" id="toasts"></div>
 
-<script src="/static/js/admin.js?v=20260519-obs1"></script>
+<script src="/static/js/admin.js?v=20260519-v2"></script>
 </body>
 </html>

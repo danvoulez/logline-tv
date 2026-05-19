@@ -7,12 +7,13 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
     item.classList.add('active');
     document.querySelectorAll('main > section').forEach(s => s.style.display = 'none');
     document.getElementById('page-' + item.dataset.page).style.display = '';
-    if (item.dataset.page === 'assets') loadAssets();
-    if (item.dataset.page === 'discovery') loadDiscovery();
-    if (item.dataset.page === 'plans') loadPlans();
-    if (item.dataset.page === 'dashboard') loadDashboard();
-    if (item.dataset.page === 'obs') startObs();
-    else stopObs();
+    stopObs();
+    if      (item.dataset.page === 'dashboard')  loadDashboard();
+    else if (item.dataset.page === 'assets')     loadAssets();
+    else if (item.dataset.page === 'discovery')  loadDiscovery();
+    else if (item.dataset.page === 'plans')      loadPlans();
+    else if (item.dataset.page === 'reports')    loadReports();
+    else if (item.dataset.page === 'obs')        startObs();
   });
 });
 
@@ -38,6 +39,17 @@ function showGeneratePlan() {
 // --- Helpers ---
 function badge(text, color) {
   return `<span class="badge badge-${color}">${text}</span>`;
+}
+
+function formatDuration(sec) {
+  if (!sec && sec !== 0) return '—';
+  if (sec < 60) return sec + 's';
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return s ? `${m}m ${s}s` : `${m}m`;
+  }
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return m ? `${h}h ${m}m` : `${h}h`;
 }
 
 function escapeHtml(value) {
@@ -86,33 +98,52 @@ async function api(method, path, body) {
 // --- Dashboard ---
 async function loadDashboard() {
   try {
-    const [assets, streamStatus] = await Promise.all([
+    const [assets, obs] = await Promise.all([
       api('GET', '/assets?limit=1000'),
-      api('GET', '/stream/status'),
+      api('GET', '/obs/snapshot').catch(() => null),
     ]);
-    const videos = assets.filter(a => a.kind === 'video');
-    const music = assets.filter(a => a.kind === 'music');
-    const bumpers = assets.filter(a => a.kind === 'bumper');
+    const videos  = assets.filter(a => a.kind === 'video');
     const approved = assets.filter(a => a.rights_status === 'approved_for_stream');
-    const pending = assets.filter(a => a.rights_status === 'pending_review');
+    const pending  = assets.filter(a => a.rights_status === 'pending_review');
+    const blocked  = assets.filter(a => a.rights_status === 'blocked');
 
     document.getElementById('dashStats').innerHTML = `
-      <div class="stat-card"><div class="stat-label">Total Assets</div><div class="stat-value">${assets.length}</div></div>
       <div class="stat-card"><div class="stat-label">Videos</div><div class="stat-value accent">${videos.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Music Sets</div><div class="stat-value">${music.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Bumpers</div><div class="stat-value">${bumpers.length}</div></div>
       <div class="stat-card"><div class="stat-label">Approved</div><div class="stat-value green">${approved.length}</div></div>
       <div class="stat-card"><div class="stat-label">Pending Review</div><div class="stat-value yellow">${pending.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Blocked</div><div class="stat-value red">${blocked.length}</div></div>
     `;
 
-    document.getElementById('streamStatus').innerHTML = streamStatus.running
-      ? '<span class="badge badge-pink">LIVE</span> Stream is running'
-      : '<span class="badge badge-grey">OFF</span> Stream is stopped';
+    // Stream status from obs snapshot (richer than /stream/status)
+    if (obs) {
+      const sig = obs.signal;
+      const dot = sig.status === 'streaming' ? 'green' : sig.status === 'fallback' ? 'amber' : 'red';
+      const label = sig.status === 'streaming' ? 'LIVE' : sig.status === 'fallback' ? 'FALLBACK' : 'OFF';
+      const hb = sig.heartbeat_stale_sec !== null ? _fmtAgo(sig.heartbeat_stale_sec) : '—';
+      const playing = sig.current ? escapeHtml(sig.current.title || '—') : '—';
+      const qh = obs.pipeline.queued_hours || 0;
+      document.getElementById('streamStatus').innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;padding:4px 0 12px">
+          <span class="dot ${dot}"></span>
+          <strong style="font-size:16px">${label}</strong>
+          <span class="muted" style="font-size:12px">heartbeat ${hb}</span>
+        </div>
+        <div class="obs-stat-row"><strong>Tocando</strong><span class="v">${playing}</span></div>
+        <div class="obs-stat-row"><strong>Fila</strong><span class="v">${qh.toFixed(1)}h</span></div>
+        ${obs.director.last_run_at ? `<div class="obs-stat-row"><strong>Diretor</strong><span class="v">rodou ${_fmtAgo(_agoSec(obs.director.last_run_at))}</span></div>` : ''}
+      `;
+    } else {
+      const streamStatus = await api('GET', '/stream/status').catch(() => ({ running: false }));
+      document.getElementById('streamStatus').innerHTML = streamStatus.running
+        ? '<span class="badge badge-pink">LIVE</span> Stream is running'
+        : '<span class="badge badge-grey">OFF</span> Stream is stopped';
+    }
 
-    const recent = assets.slice(0, 5);
-    document.getElementById('recentAssetsTable').innerHTML = recent.length
-      ? assetTable(recent, true)
-      : '<div class="empty-state"><p>No assets yet — add some!</p></div>';
+    // Pending candidates (quick check)
+    const pending_cands = await api('GET', '/candidates?limit=5&rights_status=pending_review').catch(() => []);
+    document.getElementById('recentAssetsTable').innerHTML = pending_cands.length
+      ? `<div class="muted" style="margin-bottom:8px;font-size:12px">${pending_cands.length} candidate(s) waiting for Director review</div>` + candidateTable(pending_cands)
+      : '<div class="empty-state compact"><p>Nenhum candidato pendente — tudo em dia</p></div>';
   } catch (e) {
     toast('Failed to load dashboard: ' + e.message, 'error');
   }
@@ -139,17 +170,20 @@ async function loadAssets() {
 function assetTable(assets, compact) {
   let html = '<table><thead><tr>';
   html += '<th>Title</th><th>Kind</th><th>Rights</th><th>Status</th>';
-  if (!compact) html += '<th>Duration</th><th>Streamed</th>';
+  if (!compact) html += '<th>Duration</th><th>Streamed</th><th>Health</th>';
   html += '<th>Actions</th></tr></thead><tbody>';
   for (const a of assets) {
     html += '<tr>';
-    html += `<td><strong>${a.title}</strong></td>`;
+    html += `<td><strong>${escapeHtml(a.title)}</strong></td>`;
     html += `<td>${badge(a.kind, a.kind === 'video' ? 'blue' : a.kind === 'music' ? 'pink' : 'yellow')}</td>`;
     html += `<td>${rightsBadge(a.rights_status)}</td>`;
     html += `<td>${statusBadge(a.status)}</td>`;
     if (!compact) {
-      html += `<td>${a.duration_sec ? Math.round(a.duration_sec / 60) + 'm' : '—'}</td>`;
-      html += `<td>${a.times_streamed}×</td>`;
+      html += `<td>${formatDuration(a.duration_sec)}</td>`;
+      html += `<td>${(a.times_streamed || 0)}×</td>`;
+      const hs = a.health_score;
+      const hColor = hs === null || hs === undefined ? 'grey' : hs >= 0.7 ? 'green' : hs >= 0.4 ? 'yellow' : 'red';
+      html += `<td>${badge(hs !== null && hs !== undefined ? hs.toFixed(2) : '—', hColor)}</td>`;
     }
     html += '<td>';
     if (a.rights_status === 'pending_review') {
@@ -542,7 +576,7 @@ function candidateTable(candidates) {
     html += `<td>${statusBadge(c.retrieval_status)}</td>`;
     html += `<td>${rightsBadge(c.rights_status)}</td>`;
     html += `<td>${statusBadge(c.discovery_status)}</td>`;
-    html += `<td>${c.duration_sec ? Math.round(c.duration_sec / 60) + 'm' : '-'}</td>`;
+    html += `<td>${formatDuration(c.duration_sec)}</td>`;
     html += '<td><div class="inline-actions">';
     if (c.rights_status !== 'approved_for_stream') {
       html += `<button class="btn btn-primary btn-sm" onclick="approveCandidate('${c.id}')">Approve</button>`;
@@ -600,24 +634,35 @@ async function promoteCandidate(id) {
 // --- Plans ---
 async function loadPlans() {
   document.getElementById('plansContent').innerHTML =
-    '<div class="empty-state"><p>Loading plans...</p></div>';
+    '<div class="empty-state"><p>Carregando planos...</p></div>';
   try {
-    const assets = await api('GET', '/assets?limit=1');
-    // We don't have a list-plans endpoint yet, show generate UI
-    document.getElementById('plansContent').innerHTML = `
+    const plans = await api('GET', '/plans');
+    let html = `
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Plan Management</span>
-          <button class="btn btn-primary btn-sm" onclick="showGeneratePlan()">+ Generate Plan</button>
-        </div>
-        <div id="planDetails">
-          <div class="empty-state"><p>Generate a plan to get started, or enter a plan ID below</p></div>
-          <div style="margin-top:16px;display:flex;gap:8px">
-            <input class="form-control" id="planIdInput" placeholder="Plan ID (UUID)" style="max-width:400px">
-            <button class="btn btn-secondary btn-sm" onclick="loadPlanById()">Load</button>
-          </div>
-        </div>
-      </div>
+          <span class="card-title">Planos de transmissão</span>
+          <button class="btn btn-primary btn-sm" onclick="showGeneratePlan()">+ Gerar plano</button>
+        </div>`;
+    if (!plans.length) {
+      html += '<div class="empty-state"><p>Nenhum plano ainda — o Diretor gera automaticamente quando a fila cai abaixo de 4h</p></div>';
+    } else {
+      html += '<table><thead><tr><th>Data</th><th>Status</th><th>Duração</th><th>Itens</th><th>Prontos</th><th>Concluídos</th><th></th></tr></thead><tbody>';
+      for (const p of plans) {
+        const dur = formatDuration(p.total_duration_sec);
+        html += `<tr style="cursor:pointer" onclick="loadPlanDetail('${p.id}')">
+          <td><strong>${p.plan_date || '—'}</strong></td>
+          <td>${statusBadge(p.status)}</td>
+          <td>${dur}</td>
+          <td>${p.items_total}</td>
+          <td>${p.items_ready}</td>
+          <td>${p.items_completed}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();loadPlanDetail('${p.id}')">Ver</button></td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+    html += '</div>';
+    html += `
       <div class="card" id="planDetailCard" style="display:none">
         <div class="card-header">
           <span class="card-title" id="planDetailTitle"></span>
@@ -625,11 +670,19 @@ async function loadPlans() {
         </div>
         <div id="planInfo"></div>
         <div class="table-wrap" id="planItemsTable" style="margin-top:12px;max-height:400px;overflow-y:auto"></div>
-      </div>
-    `;
+      </div>`;
+    document.getElementById('plansContent').innerHTML = html;
   } catch (e) {
     toast('Failed: ' + e.message, 'error');
   }
+}
+
+async function loadPlanDetail(id) {
+  try {
+    const plan = await api('GET', '/plans/' + id);
+    showPlanDetail(plan);
+    document.getElementById('planDetailCard').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { toast('Plano não encontrado: ' + e.message, 'error'); }
 }
 
 async function generatePlan() {
@@ -722,53 +775,88 @@ async function runPrep() {
 }
 
 // --- Reports ---
-async function loadReport() {
-  const date = document.getElementById('reportDate').value;
-  if (!date) { toast('Pick a date', 'error'); return; }
+async function loadReports() {
   try {
-    const report = await api('GET', '/reports/' + date);
-    renderReport(report);
+    const reports = await api('GET', '/reports');
+    const today = new Date().toISOString().split('T')[0];
+    let html = `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Relatórios diários</span>
+          <div class="header-actions">
+            <button class="btn btn-secondary btn-sm" onclick="generateReport('${today}')">Gerar hoje</button>
+          </div>
+        </div>`;
+    if (!reports.length) {
+      html += '<div class="empty-state"><p>Nenhum relatório ainda — o Diretor gera automaticamente todo dia</p></div>';
+    } else {
+      html += '<table><thead><tr><th>Data</th><th>Status</th><th>Planejadas</th><th>Transmitidas</th><th>Falhas</th><th></th></tr></thead><tbody>';
+      for (const r of reports) {
+        const s = r.summary || {};
+        html += `<tr style="cursor:pointer" onclick="loadReportByDate('${r.report_date}')">
+          <td><strong>${r.report_date || '—'}</strong></td>
+          <td>${statusBadge(r.status)}</td>
+          <td>${s.planned_hours || 0}h</td>
+          <td>${s.streamed_hours || 0}h</td>
+          <td>${s.failed_items || 0}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();loadReportByDate('${r.report_date}')">Ver</button></td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+    html += `</div>
+      <div id="reportContent"></div>`;
+    document.getElementById('reportsContent').innerHTML = html;
   } catch (e) {
-    document.getElementById('reportContent').innerHTML =
-      '<div class="empty-state"><p>No report found for ' + date + '</p></div>';
+    toast('Erro ao carregar relatórios: ' + e.message, 'error');
   }
 }
 
-async function generateReport() {
-  const date = document.getElementById('reportDate').value;
-  if (!date) { toast('Pick a date', 'error'); return; }
+async function loadReportByDate(date) {
   try {
-    toast('Generating report...');
+    const report = await api('GET', '/reports/' + date);
+    document.getElementById('reportContent').innerHTML = renderReport(report);
+    document.getElementById('reportContent').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    document.getElementById('reportContent').innerHTML =
+      `<div class="empty-state"><p>Relatório de ${date} não encontrado</p></div>`;
+  }
+}
+
+async function generateReport(date) {
+  if (!date) { toast('Data necessária', 'error'); return; }
+  try {
+    toast('Gerando relatório...');
     await api('POST', '/reports/' + date + '/generate');
-    toast('Report generated');
-    loadReport();
-  } catch (e) { toast('Error: ' + e.message, 'error'); }
+    toast('Relatório gerado');
+    loadReports();
+  } catch (e) { toast('Erro: ' + e.message, 'error'); }
 }
 
 function renderReport(report) {
   const s = report.summary || {};
-  let html = '<div class="stats-grid">';
-  html += `<div class="stat-card"><div class="stat-label">Planned Hours</div><div class="stat-value">${s.planned_hours || 0}</div></div>`;
-  html += `<div class="stat-card"><div class="stat-label">Streamed Hours</div><div class="stat-value accent">${s.streamed_hours || 0}</div></div>`;
-  html += `<div class="stat-card"><div class="stat-label">Completed</div><div class="stat-value green">${s.completed_items || 0}</div></div>`;
-  html += `<div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value red">${s.failed_items || 0}</div></div>`;
-  html += `<div class="stat-card"><div class="stat-label">Fallback Events</div><div class="stat-value yellow">${s.fallback_events || 0}</div></div>`;
-  html += `<div class="stat-card"><div class="stat-label">Pending Review</div><div class="stat-value">${s.pending_review_assets || 0}</div></div>`;
+  let html = `<div class="card" style="margin-top:12px">
+    <div class="card-header"><span class="card-title">Relatório ${report.report_date || ''}</span></div>
+    <div class="stats-grid">`;
+  html += `<div class="stat-card"><div class="stat-label">Planejado</div><div class="stat-value">${s.planned_hours || 0}h</div></div>`;
+  html += `<div class="stat-card"><div class="stat-label">Transmitido</div><div class="stat-value accent">${s.streamed_hours || 0}h</div></div>`;
+  html += `<div class="stat-card"><div class="stat-label">Concluídos</div><div class="stat-value green">${s.completed_items || 0}</div></div>`;
+  html += `<div class="stat-card"><div class="stat-label">Falhas</div><div class="stat-value red">${s.failed_items || 0}</div></div>`;
+  html += `<div class="stat-card"><div class="stat-label">Fallbacks</div><div class="stat-value yellow">${s.fallback_events || 0}</div></div>`;
+  html += `<div class="stat-card"><div class="stat-label">Pendentes</div><div class="stat-value">${s.pending_review_assets || 0}</div></div>`;
   html += '</div>';
-
   if (s.suggestions && s.suggestions.length) {
-    html += '<div class="card" style="margin-top:8px"><div class="card-title" style="margin-bottom:8px">Suggestions</div><ul style="padding-left:20px">';
+    html += '<div style="margin-top:12px"><strong style="font-size:12px">Sugestões</strong><ul style="padding-left:20px;margin-top:6px">';
     for (const sug of s.suggestions) {
-      html += `<li style="margin-bottom:4px;color:var(--text2)">${sug}</li>`;
+      html += `<li style="margin-bottom:4px;color:var(--text2);font-size:13px">${escapeHtml(sug)}</li>`;
     }
     html += '</ul></div>';
   }
-
   if (report.markdown_text) {
-    html += `<div class="card" style="margin-top:8px"><div class="card-title" style="margin-bottom:8px">Full Report</div><pre style="white-space:pre-wrap;color:var(--text2);font-size:12px">${report.markdown_text}</pre></div>`;
+    html += `<div style="margin-top:12px"><pre style="white-space:pre-wrap;color:var(--text2);font-size:12px">${escapeHtml(report.markdown_text)}</pre></div>`;
   }
-
-  document.getElementById('reportContent').innerHTML = html;
+  html += '</div>';
+  return html;
 }
 
 // --- Stream ---
