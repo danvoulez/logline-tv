@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>voulezvous — admin</title>
-  <link rel="stylesheet" href="/static/css/admin.css?v=20260519-discovery">
+  <link rel="stylesheet" href="/static/css/admin.css?v=20260519-obs1">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -19,6 +19,7 @@
     <a class="nav-item" data-page="discovery">Discovery</a>
     <a class="nav-item" data-page="plans">Plans</a>
     <a class="nav-item" data-page="reports">Reports</a>
+    <a class="nav-item" data-page="obs">Observabilidade</a>
     <a class="nav-item" href="/" target="_blank">Open Player ↗</a>
   </nav>
 
@@ -174,6 +175,35 @@
         </div>
         <div id="reportContent">
           <div class="empty-state"><p>Select a date to view a report</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Observabilidade -->
+    <section id="page-obs" style="display:none">
+      <div class="page-header">
+        <h2>Observabilidade</h2>
+        <div class="header-actions">
+          <span class="muted" id="obsClock">—</span>
+          <button class="btn btn-secondary btn-sm" onclick="obsForceTick()">Forçar rodada</button>
+        </div>
+      </div>
+      <div class="obs-grid">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Sinal</span><span id="obsSignalBadge"></span></div>
+          <div id="obsSignal"><div class="empty-state compact"><p>Loading...</p></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Pipeline</span></div>
+          <div id="obsPipeline"><div class="empty-state compact"><p>Loading...</p></div></div>
+        </div>
+        <div class="card obs-wide">
+          <div class="card-header"><span class="card-title">Diretor — últimas decisões</span><span id="obsBrainBadge"></span></div>
+          <div id="obsBrain"><div class="empty-state compact"><p>Loading...</p></div></div>
+        </div>
+        <div class="card obs-wide">
+          <div class="card-header"><span class="card-title">Saúde</span></div>
+          <div id="obsHealth"><div class="empty-state compact"><p>Loading...</p></div></div>
         </div>
       </div>
     </section>
@@ -353,6 +383,6 @@
 
 <div class="toast-container" id="toasts"></div>
 
-<script src="/static/js/admin.js?v=20260519-domains2"></script>
+<script src="/static/js/admin.js?v=20260519-obs1"></script>
 </body>
 </html>

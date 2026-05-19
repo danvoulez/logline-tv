@@ -36,6 +36,7 @@ from voulezvous.api.routers import (
     assets,
     director as director_router,
     health,
+    observability as obs_router,
     plans,
     prep,
     reports,
@@ -65,6 +66,7 @@ app.include_router(prep.router)
 app.include_router(stream.router)
 app.include_router(reports.router)
 app.include_router(director_router.router)
+app.include_router(obs_router.router)
 
 # Acquisition subsystem routers
 app.include_router(acq_domain_policies.router)

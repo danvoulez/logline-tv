@@ -440,6 +440,67 @@ select.form-control { cursor: pointer; }
   vertical-align: middle;
 }
 
+.obs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.obs-grid .obs-wide { grid-column: 1 / -1; }
+
+.obs-stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+}
+.obs-stat-row:last-child { border-bottom: none; }
+.obs-stat-row strong { color: var(--text); }
+.obs-stat-row .v { color: var(--text2); font-variant-numeric: tabular-nums; }
+
+.obs-bar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 6px 0 4px;
+}
+.obs-bar > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+.obs-bar.alert > div { background: #c33; }
+.obs-bar.warn > div { background: #d97706; }
+
+.dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #888;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.dot.green { background: #22c55e; }
+.dot.amber { background: #d97706; }
+.dot.red   { background: #ef4444; }
+
+.action-table {
+  font-size: 12px;
+  width: 100%;
+  border-collapse: collapse;
+}
+.action-table th, .action-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.action-table .verb { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.action-table .why { color: var(--text2); max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action-table tr.s-executed td { color: var(--text); }
+.action-table tr.s-rejected td { color: #d97706; }
+.action-table tr.s-failed   td { color: #ef4444; }
+
 .modal-actions {
   display: flex;
   gap: 8px;

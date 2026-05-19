@@ -11,6 +11,8 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
     if (item.dataset.page === 'discovery') loadDiscovery();
     if (item.dataset.page === 'plans') loadPlans();
     if (item.dataset.page === 'dashboard') loadDashboard();
+    if (item.dataset.page === 'obs') startObs();
+    else stopObs();
   });
 });
 
@@ -784,6 +786,134 @@ async function streamStop() {
     toast('Stream stop requested');
     loadDashboard();
   } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// --- Observabilidade ---
+let _obsTimer = null;
+
+function startObs() {
+  stopObs();
+  refreshObs();
+  _obsTimer = setInterval(refreshObs, 10000);
+}
+
+function stopObs() {
+  if (_obsTimer) { clearInterval(_obsTimer); _obsTimer = null; }
+}
+
+function _fmtGB(bytes) {
+  if (!bytes && bytes !== 0) return '—';
+  return (bytes / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+}
+
+function _dot(state) {
+  return `<span class="dot ${state}"></span>`;
+}
+
+function _agoSec(iso) {
+  if (!iso) return null;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+}
+
+function _fmtAgo(sec) {
+  if (sec === null || sec === undefined) return '—';
+  if (sec < 60) return sec + 's ago';
+  if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+  if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+  return Math.floor(sec / 86400) + 'd ago';
+}
+
+async function refreshObs() {
+  try {
+    const s = await api('GET', '/obs/snapshot');
+    document.getElementById('obsClock').textContent =
+      'atualizado ' + new Date(s.now).toLocaleTimeString();
+
+    // ── Signal ──
+    const sig = s.signal;
+    let sigState = 'red', sigLabel = 'OFF';
+    if (sig.running && sig.status === 'streaming') { sigState = 'green'; sigLabel = 'LIVE'; }
+    else if (sig.running && sig.status === 'fallback') { sigState = 'amber'; sigLabel = 'FALLBACK'; }
+    else if (sig.running) { sigState = 'amber'; sigLabel = sig.status.toUpperCase(); }
+    document.getElementById('obsSignalBadge').innerHTML =
+      `${_dot(sigState)} ${sigLabel}`;
+
+    let sigHtml = '';
+    sigHtml += `<div class="obs-stat-row"><strong>Status</strong><span class="v">${escapeHtml(sig.status || '—')}</span></div>`;
+    sigHtml += `<div class="obs-stat-row"><strong>Tocando</strong><span class="v">${sig.current ? escapeHtml(sig.current.title || '—') : '—'}</span></div>`;
+    sigHtml += `<div class="obs-stat-row"><strong>Heartbeat</strong><span class="v">${_fmtAgo(sig.heartbeat_stale_sec)}</span></div>`;
+    if (sig.next_5.length) {
+      sigHtml += `<div class="muted" style="margin-top:10px;font-size:12px">Próximos:</div>`;
+      sigHtml += '<ul style="padding-left:18px;margin:4px 0;font-size:12px;color:var(--text2)">';
+      for (const n of sig.next_5) {
+        sigHtml += `<li>${escapeHtml(n.title || '—')} <span style="opacity:.6">(${n.prep_status})</span></li>`;
+      }
+      sigHtml += '</ul>';
+    }
+    document.getElementById('obsSignal').innerHTML = sigHtml;
+
+    // ── Pipeline ──
+    const p = s.pipeline;
+    const q = p.queued_hours || 0;
+    const qPct = Math.min(100, q / 24 * 100);
+    const qBar = q < 4 ? 'alert' : (q < 8 ? 'warn' : '');
+    const disk = p.disk || {};
+    const dPct = disk.used_pct || 0;
+    const dBar = dPct > 85 ? 'alert' : (dPct > 70 ? 'warn' : '');
+
+    let pHtml = '';
+    pHtml += `<div class="obs-stat-row"><strong>Fila</strong><span class="v">${q.toFixed(1)} h</span></div>`;
+    pHtml += `<div class="obs-bar ${qBar}"><div style="width:${qPct}%"></div></div>`;
+    pHtml += `<div class="obs-stat-row"><strong>Disco</strong><span class="v">${_fmtGB(disk.used_bytes)} / ${_fmtGB(disk.total_bytes)} (${dPct}%)</span></div>`;
+    pHtml += `<div class="obs-bar ${dBar}"><div style="width:${dPct}%"></div></div>`;
+    if (p.plan) {
+      pHtml += `<div class="obs-stat-row" style="margin-top:8px"><strong>Plano ativo</strong><span class="v">${p.plan.status}</span></div>`;
+      pHtml += `<div class="obs-stat-row"><strong>Itens</strong><span class="v">${p.plan.items_ready} ready / ${p.plan.items_queued} queued / ${p.plan.items_total} total</span></div>`;
+    } else {
+      pHtml += '<div class="muted" style="margin-top:8px">Nenhum plano ativo</div>';
+    }
+    document.getElementById('obsPipeline').innerHTML = pHtml;
+
+    // ── Brain ──
+    const d = s.director;
+    const lastAgo = _agoSec(d.last_run_at);
+    document.getElementById('obsBrainBadge').textContent =
+      d.last_run_at ? `última rodada ${_fmtAgo(lastAgo)}` : 'sem rodadas ainda';
+
+    let bHtml = '';
+    if (!d.recent_actions || !d.recent_actions.length) {
+      bHtml = '<div class="empty-state compact"><p>Nenhuma ação ainda</p></div>';
+    } else {
+      bHtml = '<table class="action-table"><thead><tr><th>hora</th><th>verbo</th><th>por quê</th><th>status</th></tr></thead><tbody>';
+      for (const a of d.recent_actions.slice(0, 30)) {
+        const t = a.at ? new Date(a.at).toLocaleTimeString() : '—';
+        const txt = a.error || a.why || '';
+        bHtml += `<tr class="s-${a.status}"><td>${t}</td><td class="verb">${escapeHtml(a.verb)}</td><td class="why" title="${escapeHtml(txt)}">${escapeHtml(txt)}</td><td>${a.status}</td></tr>`;
+      }
+      bHtml += '</tbody></table>';
+    }
+    document.getElementById('obsBrain').innerHTML = bHtml;
+
+    // ── Health ──
+    const h = s.health;
+    let hHtml = '';
+    hHtml += `<div class="obs-stat-row"><strong>${_dot(h.ollama_reachable ? 'green' : 'red')}Ollama</strong><span class="v">${h.ollama_reachable ? 'online' : 'offline'}</span></div>`;
+    hHtml += `<div class="obs-stat-row"><strong>Discovery</strong><span class="v">${h.last_discovery_at ? _fmtAgo(_agoSec(h.last_discovery_at)) : 'nunca'}</span></div>`;
+    hHtml += `<div class="obs-stat-row"><strong>Health médio da biblioteca</strong><span class="v">${h.avg_health_score !== null ? h.avg_health_score.toFixed(2) : '—'}</span></div>`;
+    document.getElementById('obsHealth').innerHTML = hHtml;
+  } catch (e) {
+    document.getElementById('obsClock').textContent = 'erro: ' + e.message;
+  }
+}
+
+async function obsForceTick() {
+  try {
+    const r = await api('POST', '/director/tick');
+    toast(`Rodada: ${r.executed} executadas, ${r.rejected} recusadas, ${r.failed} falhas`);
+    refreshObs();
+  } catch (e) {
+    toast('Erro: ' + e.message, 'error');
+  }
 }
 
 // --- Init ---
