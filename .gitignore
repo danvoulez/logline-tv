@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+.ruff_cache/
+.pytest_cache/
+spool/downloads/
+spool/prepared/
+spool/tmp/
+spool/reports/
+*.mp4
+!spool/fallback/
