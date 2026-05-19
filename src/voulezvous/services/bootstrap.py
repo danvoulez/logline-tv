@@ -22,9 +22,12 @@ logger = structlog.get_logger()
 async def ensure_fallback_video() -> None:
     settings.ensure_spool_dirs()
     fb = settings.fallback_video_path
-    if fb.exists() and fb.stat().st_size > 0:
+    _ONE_HOUR_BYTES = 5 * 1024 * 1024  # 1h black screen w/ h264 is ~5MB+
+    if fb.exists() and fb.stat().st_size >= _ONE_HOUR_BYTES:
         logger.info("bootstrap.fallback_present", path=str(fb))
         return
+    if fb.exists():
+        fb.unlink()  # regenerate: file is too small (pre-1h version)
 
     w, h = settings.house_resolution.split("x")
     args = [
