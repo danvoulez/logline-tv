@@ -283,6 +283,12 @@ class NarrateArgs(BaseModel):
     text: str = Field(min_length=1, max_length=500)
 
 
+async def tool_run_cleanup(db: AsyncSession, args: NoArgs) -> dict:
+    from voulezvous.services.cleanup import run_cleanup_cycle
+
+    return await run_cleanup_cycle(db)
+
+
 # ── Verb registry ─────────────────────────────────────────────────────────────
 
 TOOLS: dict[str, tuple[type[BaseModel], Any]] = {
@@ -299,6 +305,7 @@ TOOLS: dict[str, tuple[type[BaseModel], Any]] = {
     "boost_keyword": (BoostKeywordArgs, tool_boost_keyword),
     "disable_domain": (DomainIdArgs, tool_disable_domain),
     "narrate": (NarrateArgs, tool_narrate),
+    "run_cleanup": (NoArgs, tool_run_cleanup),
 }
 
 
@@ -320,6 +327,7 @@ Verbs and required args (strict — extra fields are rejected):
 - boost_keyword {keyword_id:uuid, factor:float=1.2} — multiply weight (0.1..5.0)
 - disable_domain {domain_id:uuid} — turn a site off
 - narrate {text:str} — note for the operator
+- run_cleanup {} — delete orphan files in /spool/downloads and /spool/prepared
 """.strip()
 
 

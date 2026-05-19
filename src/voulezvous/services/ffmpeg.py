@@ -69,10 +69,16 @@ async def mix_audio(
 
 
 async def stream_to_target(input_path: Path, target: str) -> tuple[int, str]:
+    """Stream `input_path` to `target` with retry + exponential backoff.
+
+    rc=0 → success. Otherwise we retry up to 3 times (waits 2s, 8s, 30s).
+    HLS goes through stream_to_hls() which has its own retry path.
+    """
+    if target == "hls":
+        return await stream_to_hls(input_path)
+
     if target == "null":
         args = ["-y", "-re", "-i", str(input_path), "-f", "null", "-"]
-    elif target == "hls":
-        return await stream_to_hls(input_path)
     else:
         args = [
             "-re",
@@ -81,11 +87,20 @@ async def stream_to_target(input_path: Path, target: str) -> tuple[int, str]:
             "-f", "flv",
             target,
         ]
-    rc, _, stderr = await run_ffmpeg(args)
-    return rc, stderr
+
+    backoffs = [0, 2, 8, 30]
+    last_rc, last_err = 1, ""
+    for attempt, wait in enumerate(backoffs):
+        if wait:
+            await asyncio.sleep(wait)
+            logger.info("ffmpeg_retry", attempt=attempt, wait=wait, target=target)
+        last_rc, _, last_err = await run_ffmpeg(args)
+        if last_rc == 0:
+            return last_rc, last_err
+    return last_rc, last_err
 
 
-async def stream_to_hls(input_path: Path) -> tuple[int, str]:
+async def stream_to_hls_once(input_path: Path) -> tuple[int, str]:
     hls_dir = settings.spool_hls
     hls_dir.mkdir(parents=True, exist_ok=True)
     playlist = hls_dir / "stream.m3u8"
@@ -98,12 +113,27 @@ async def stream_to_hls(input_path: Path) -> tuple[int, str]:
         "-f", "hls",
         "-hls_time", str(settings.hls_segment_duration),
         "-hls_list_size", str(settings.hls_playlist_size),
-        "-hls_flags", "delete_segments+append_list+omit_endlist+program_date_time",
+        "-hls_flags", "delete_segments+append_list+omit_endlist+program_date_time+independent_segments",
+        "-hls_delete_threshold", "3",
         "-hls_segment_filename", str(hls_dir / "seg_%05d.ts"),
         str(playlist),
     ]
     rc, _, stderr = await run_ffmpeg(args)
     return rc, stderr
+
+
+async def stream_to_hls(input_path: Path) -> tuple[int, str]:
+    """HLS streaming with retry + safer retention flags."""
+    backoffs = [0, 2, 8]
+    last_rc, last_err = 1, ""
+    for attempt, wait in enumerate(backoffs):
+        if wait:
+            await asyncio.sleep(wait)
+            logger.info("hls_retry", attempt=attempt, wait=wait)
+        last_rc, last_err = await stream_to_hls_once(input_path)
+        if last_rc == 0:
+            return last_rc, last_err
+    return last_rc, last_err
 
 
 def copy_file(src: Path, dst: Path) -> Path:

@@ -66,6 +66,7 @@ Heuristic priorities:
 - candidates.approved_unpromoted > 0 → promote_candidate for up to 3 ids from candidates.promotable.
 - discovery.hours_since_last_run > 6 → run_discovery.
 - worst_approved_assets[i].health_score < 0.3 AND error_count >= 3 → block_asset.
+- disk.used_pct > 85 → run_cleanup.
 
 Respond now with JSON only.
 """
@@ -139,11 +140,31 @@ async def _fallback_plan_if_dry(db: AsyncSession, state: dict) -> dict | None:
 
 
 async def _fallback_ensure_stream(db: AsyncSession, state: dict) -> None:
-    if not (state.get("stream") or {}).get("running"):
+    stream = state.get("stream") or {}
+    if not stream.get("running"):
         try:
             await tool_start_stream(db, NoArgs())
         except Exception as e:
             logger.warning("director.fallback_start_failed", error=str(e))
+
+    # Watchdog: if heartbeat stale > 180s and we want it running, bump it.
+    stale = stream.get("heartbeat_stale_sec")
+    if stream.get("running") and isinstance(stale, int) and stale > 180:
+        try:
+            from voulezvous.services.stream_control import (
+                get_or_create_stream_control,
+            )
+            control = await get_or_create_stream_control(db)
+            # Toggling desired_running causes the streamer to restart its inner loop
+            control.desired_running = False
+            await db.commit()
+            await asyncio.sleep(0.5)
+            control = await get_or_create_stream_control(db)
+            control.desired_running = True
+            await db.commit()
+            logger.warning("director.watchdog_bumped_stream", stale_sec=stale)
+        except Exception as e:
+            logger.warning("director.watchdog_failed", error=str(e))
 
 
 async def director_tick() -> dict:

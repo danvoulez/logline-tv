@@ -78,6 +78,15 @@ app.include_router(acq_reports.router, prefix="/acq")
 app.include_router(acq_bridge.router)
 
 
+@app.on_event("startup")
+async def _on_startup() -> None:
+    from voulezvous.services.bootstrap import run_boot_tasks
+
+    # fire-and-forget; FFmpeg takes a few seconds and we don't want to block /health
+    import asyncio
+    asyncio.create_task(run_boot_tasks())
+
+
 @app.get("/", response_class=HTMLResponse)
 async def client_page(request: Request):
     return templates.TemplateResponse(request, "client.html")

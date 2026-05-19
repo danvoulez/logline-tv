@@ -66,12 +66,18 @@ async def compact_state(db: AsyncSession) -> dict:
         )
     ).scalar_one() or 0
 
+    # Heartbeat staleness in seconds (None if never beat)
+    heartbeat_stale_sec = None
+    if control and control.heartbeat_at:
+        heartbeat_stale_sec = int((now - control.heartbeat_at).total_seconds())
+
     stream_block = {
         "running": bool(control and control.desired_running),
         "status": control.status if control else "no-control-row",
         "current_item": current_item,
         "queued_hours": round(int(queued_sec) / 3600, 2),
         "heartbeat_at": control.heartbeat_at.isoformat() if control and control.heartbeat_at else None,
+        "heartbeat_stale_sec": heartbeat_stale_sec,
     }
 
     # ── Library ───────────────────────────────────────────────────────────────
@@ -237,6 +243,13 @@ async def compact_state(db: AsyncSession) -> dict:
         for a in recent_rows
     ]
 
+    # ── Disk ──────────────────────────────────────────────────────────────────
+    try:
+        from voulezvous.services.cleanup import disk_usage_spool
+        disk = disk_usage_spool()
+    except Exception:
+        disk = None
+
     return {
         "now": now.isoformat(),
         "stream": stream_block,
@@ -246,5 +259,6 @@ async def compact_state(db: AsyncSession) -> dict:
         "discovery": discovery_block,
         "sites": sites,
         "keywords": keywords,
+        "disk": disk,
         "last_actions": last_actions,
     }
