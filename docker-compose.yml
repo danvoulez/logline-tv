@@ -103,6 +103,29 @@ services:
         condition: service_completed_successfully
     logging: *default-logging
 
+  # Autonomous Director — LLM-bounded loop (5-min ticks)
+  director:
+    build: .
+    command: app director
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
+      DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
+      SPOOL_ROOT: ${SPOOL_ROOT:-/spool}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DIRECTOR_INTERVAL_SEC: ${DIRECTOR_INTERVAL_SEC:-300}
+      DIRECTOR_MAX_ACTIONS: ${DIRECTOR_MAX_ACTIONS:-5}
+      DIRECTOR_LLM_TIMEOUT_SEC: ${DIRECTOR_LLM_TIMEOUT_SEC:-45}
+      DIRECTOR_MIN_QUEUED_HOURS: ${DIRECTOR_MIN_QUEUED_HOURS:-4}
+      <<: *acq-env
+    volumes:
+      - spool:/spool
+      - browser_profiles:/spool/browser_profiles
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    logging: *default-logging
+
   # Acquisition orchestrator — runs only when profile=acq is enabled.
   # Banco começa vazio: você cadastra sites/keywords pelo /admin antes de rodar.
   acq-orchestrator:

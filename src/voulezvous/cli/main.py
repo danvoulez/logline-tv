@@ -89,6 +89,18 @@ async def _streamer():
     await run_streamer()
 
 
+@cli.command("director")
+def director_cmd():
+    """Run the autonomous Director loop (5-min ticks, LLM-bounded)."""
+    asyncio.run(_director())
+
+
+async def _director():
+    from voulezvous.services.director import run_director_loop
+
+    await run_director_loop()
+
+
 @cli.command("reporter")
 @click.option("--date", "report_date", required=True, type=click.DateTime(formats=["%Y-%m-%d"]))
 def reporter_cmd(report_date):

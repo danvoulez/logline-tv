@@ -32,7 +32,15 @@ from voulezvous.acquisition.api import (
 from voulezvous.acquisition.api import (
     reports as acq_reports,
 )
-from voulezvous.api.routers import assets, health, plans, prep, reports, stream
+from voulezvous.api.routers import (
+    assets,
+    director as director_router,
+    health,
+    plans,
+    prep,
+    reports,
+    stream,
+)
 from voulezvous.config import settings
 from voulezvous.logging_config import setup_logging
 
@@ -56,6 +64,7 @@ app.include_router(plans.router)
 app.include_router(prep.router)
 app.include_router(stream.router)
 app.include_router(reports.router)
+app.include_router(director_router.router)
 
 # Acquisition subsystem routers
 app.include_router(acq_domain_policies.router)
