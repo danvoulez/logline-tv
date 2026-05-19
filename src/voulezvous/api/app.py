@@ -33,9 +33,9 @@ app.include_router(reports.router)
 
 @app.get("/", response_class=HTMLResponse)
 async def client_page(request: Request):
-    return templates.TemplateResponse("client.html", {"request": request})
+    return templates.TemplateResponse(request, "client.html")
 
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
+    return templates.TemplateResponse(request, "admin.html")
