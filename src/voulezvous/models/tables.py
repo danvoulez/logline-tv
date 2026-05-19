@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Enum,
     ForeignKey,
     Integer,
     Numeric,
@@ -36,9 +37,13 @@ from voulezvous.models.enums import (
 class LibraryAsset(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "library_assets"
 
-    kind: Mapped[AssetKind] = mapped_column(nullable=False)
+    kind: Mapped[AssetKind] = mapped_column(
+        Enum(AssetKind, native_enum=False), nullable=False
+    )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    source_type: Mapped[SourceType] = mapped_column(nullable=False)
+    source_type: Mapped[SourceType] = mapped_column(
+        Enum(SourceType, native_enum=False), nullable=False
+    )
     source_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     local_source_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     source_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -47,10 +52,16 @@ class LibraryAsset(Base, UUIDPrimaryKey, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     rights_status: Mapped[RightsStatus] = mapped_column(
-        default=RightsStatus.pending_review, nullable=False
+        Enum(RightsStatus, native_enum=False),
+        default=RightsStatus.pending_review,
+        nullable=False,
     )
     approval_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[AssetStatus] = mapped_column(default=AssetStatus.registered, nullable=False)
+    status: Mapped[AssetStatus] = mapped_column(
+        Enum(AssetStatus, native_enum=False),
+        default=AssetStatus.registered,
+        nullable=False,
+    )
 
     last_downloaded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -69,7 +80,11 @@ class StreamPlan(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "stream_plans"
 
     plan_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[PlanStatus] = mapped_column(default=PlanStatus.draft, nullable=False)
+    status: Mapped[PlanStatus] = mapped_column(
+        Enum(PlanStatus, native_enum=False),
+        default=PlanStatus.draft,
+        nullable=False,
+    )
     target_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     target_end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -112,9 +127,15 @@ class StreamPlanItem(Base, UUIDPrimaryKey, TimestampMixin):
     )
     delete_after_stream: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    prep_status: Mapped[PrepStatus] = mapped_column(default=PrepStatus.queued, nullable=False)
+    prep_status: Mapped[PrepStatus] = mapped_column(
+        Enum(PrepStatus, native_enum=False),
+        default=PrepStatus.queued,
+        nullable=False,
+    )
     stream_status: Mapped[StreamItemStatus] = mapped_column(
-        default=StreamItemStatus.queued, nullable=False
+        Enum(StreamItemStatus, native_enum=False),
+        default=StreamItemStatus.queued,
+        nullable=False,
     )
 
     prepared_file_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
@@ -130,7 +151,9 @@ class StreamPlanItem(Base, UUIDPrimaryKey, TimestampMixin):
 
     plan: Mapped["StreamPlan"] = relationship(back_populates="items")
     video_asset: Mapped["LibraryAsset"] = relationship(foreign_keys=[video_asset_id])
-    music_asset: Mapped["LibraryAsset | None"] = relationship(foreign_keys=[music_asset_id])
+    music_asset: Mapped["LibraryAsset | None"] = relationship(
+        foreign_keys=[music_asset_id]
+    )
 
 
 class PrepJob(Base, UUIDPrimaryKey, TimestampMixin):
@@ -139,13 +162,25 @@ class PrepJob(Base, UUIDPrimaryKey, TimestampMixin):
     plan_item_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stream_plan_items.id"), nullable=False
     )
-    job_type: Mapped[JobType] = mapped_column(nullable=False)
-    status: Mapped[JobStatus] = mapped_column(default=JobStatus.pending, nullable=False)
+    job_type: Mapped[JobType] = mapped_column(
+        Enum(JobType, native_enum=False), nullable=False
+    )
+    status: Mapped[JobStatus] = mapped_column(
+        Enum(JobStatus, native_enum=False),
+        default=JobStatus.pending,
+        nullable=False,
+    )
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, server_default="{}", nullable=False)
+    metadata_: Mapped[dict] = mapped_column(
+        "metadata", JSONB, server_default="{}", nullable=False
+    )
 
     plan_item: Mapped["StreamPlanItem"] = relationship()
 
@@ -153,7 +188,9 @@ class PrepJob(Base, UUIDPrimaryKey, TimestampMixin):
 class StreamEvent(Base, UUIDPrimaryKey):
     __tablename__ = "stream_events"
 
-    event_type: Mapped[EventType] = mapped_column(nullable=False)
+    event_type: Mapped[EventType] = mapped_column(
+        Enum(EventType, native_enum=False), nullable=False
+    )
     plan_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stream_plans.id"), nullable=True
     )
@@ -173,7 +210,9 @@ class DailyReport(Base, UUIDPrimaryKey):
     __tablename__ = "daily_reports"
 
     report_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[ReportStatus] = mapped_column(nullable=False)
+    status: Mapped[ReportStatus] = mapped_column(
+        Enum(ReportStatus, native_enum=False), nullable=False
+    )
     summary: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
     markdown_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
