@@ -55,7 +55,23 @@ async def generate_plan(
         result = await db.execute(q_music)
         music_assets = list(result.scalars().all())
 
-    start_dt = datetime(plan_date.year, plan_date.month, plan_date.day, tzinfo=timezone.utc)
+    # Fetch approved bumper assets
+    q_bumper = (
+        select(LibraryAsset)
+        .where(LibraryAsset.kind == AssetKind.bumper)
+        .where(LibraryAsset.rights_status == RightsStatus.approved_for_stream)
+        .where(
+            LibraryAsset.status.in_(
+                [AssetStatus.approved, AssetStatus.downloaded, AssetStatus.prepared]
+            )
+        )
+    )
+    result = await db.execute(q_bumper)
+    bumper_assets = list(result.scalars().all())
+
+    start_dt = datetime(
+        plan_date.year, plan_date.month, plan_date.day, tzinfo=timezone.utc
+    )
     end_dt = start_dt + timedelta(hours=hours)
 
     plan = StreamPlan(
@@ -78,6 +94,27 @@ async def generate_plan(
     video_idx = 0
 
     while filled_seconds < target_seconds:
+        # Insert bumper between videos if available
+        if bumper_assets and sequence > 0:
+            bumper = random.choice(bumper_assets)
+            bumper_dur = bumper.duration_sec or 5
+            item_start = start_dt + timedelta(seconds=filled_seconds)
+            item_end = item_start + timedelta(seconds=bumper_dur)
+            bumper_item = StreamPlanItem(
+                stream_plan_id=plan.id,
+                sequence_index=sequence,
+                video_asset_id=bumper.id,
+                planned_start_at=item_start,
+                planned_end_at=item_end,
+                target_duration_sec=bumper_dur,
+            )
+            db.add(bumper_item)
+            filled_seconds += bumper_dur
+            sequence += 1
+
+            if filled_seconds >= target_seconds:
+                break
+
         # Pick next video, avoid immediate repeat
         video = shuffled_videos[video_idx % len(shuffled_videos)]
         if video.id == last_video_id and len(shuffled_videos) > 1:
@@ -119,7 +156,11 @@ async def generate_plan(
     await db.commit()
 
     # Reload with items
-    q = select(StreamPlan).where(StreamPlan.id == plan.id).options(selectinload(StreamPlan.items))
+    q = (
+        select(StreamPlan)
+        .where(StreamPlan.id == plan.id)
+        .options(selectinload(StreamPlan.items))
+    )
     result = await db.execute(q)
     plan = result.scalar_one()
 

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>voulezvous — admin</title>
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <h1>voulezvous</h1>
+      <p>streaming engine</p>
+    </div>
+    <a class="nav-item active" data-page="dashboard">Dashboard</a>
+    <a class="nav-item" data-page="assets">Assets</a>
+    <a class="nav-item" data-page="plans">Plans</a>
+    <a class="nav-item" data-page="reports">Reports</a>
+    <a class="nav-item" href="/" target="_blank">Open Player ↗</a>
+  </nav>
+
+  <main class="main">
+    <!-- Dashboard -->
+    <section id="page-dashboard">
+      <div class="page-header"><h2>Dashboard</h2></div>
+      <div class="stats-grid" id="dashStats"></div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Stream Status</span>
+          <div>
+            <button class="btn btn-primary btn-sm" onclick="streamStart()">Start Stream</button>
+            <button class="btn btn-secondary btn-sm" onclick="streamStop()">Stop Stream</button>
+          </div>
+        </div>
+        <div id="streamStatus">Loading...</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Recent Assets</span></div>
+        <div class="table-wrap" id="recentAssetsTable"></div>
+      </div>
+    </section>
+
+    <!-- Assets -->
+    <section id="page-assets" style="display:none">
+      <div class="page-header">
+        <h2>Assets</h2>
+        <button class="btn btn-primary" onclick="showAddAsset()">+ Add Asset</button>
+      </div>
+      <div class="card">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <select class="form-control" id="filterKind" style="width:auto" onchange="loadAssets()">
+            <option value="">All kinds</option>
+            <option value="video">Video</option>
+            <option value="music">Music</option>
+            <option value="bumper">Bumper</option>
+          </select>
+          <select class="form-control" id="filterRights" style="width:auto" onchange="loadAssets()">
+            <option value="">All rights</option>
+            <option value="pending_review">Pending Review</option>
+            <option value="approved_for_stream">Approved</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </div>
+        <div class="table-wrap" id="assetsTable"></div>
+      </div>
+    </section>
+
+    <!-- Plans -->
+    <section id="page-plans" style="display:none">
+      <div class="page-header">
+        <h2>Plans</h2>
+        <button class="btn btn-primary" onclick="showGeneratePlan()">+ Generate Plan</button>
+      </div>
+      <div id="plansContent"></div>
+    </section>
+
+    <!-- Reports -->
+    <section id="page-reports" style="display:none">
+      <div class="page-header"><h2>Reports</h2></div>
+      <div class="card">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <input type="date" class="form-control" id="reportDate" style="width:auto">
+          <button class="btn btn-primary btn-sm" onclick="loadReport()">Load Report</button>
+          <button class="btn btn-secondary btn-sm" onclick="generateReport()">Generate Now</button>
+        </div>
+        <div id="reportContent">
+          <div class="empty-state"><p>Select a date to view a report</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Add Asset Modal -->
+<div class="modal-backdrop" id="addAssetModal">
+  <div class="modal">
+    <h3>Add Asset</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Kind</label>
+        <select class="form-control" id="newKind">
+          <option value="video">Video</option>
+          <option value="music">Music</option>
+          <option value="bumper">Bumper</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Source Type</label>
+        <select class="form-control" id="newSourceType">
+          <option value="direct_url">Direct URL</option>
+          <option value="uploaded_file">Local File</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Title</label>
+      <input class="form-control" id="newTitle" placeholder="My Video Title">
+    </div>
+    <div class="form-group">
+      <label>Source URL</label>
+      <input class="form-control" id="newSourceUrl" placeholder="https://example.com/video.mp4">
+    </div>
+    <div class="form-group">
+      <label>Local Path (if uploaded file)</label>
+      <input class="form-control" id="newLocalPath" placeholder="/spool/downloads/my-file.mp4">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Duration (seconds)</label>
+        <input class="form-control" id="newDuration" type="number" placeholder="600">
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input class="form-control" id="newNotes" placeholder="Creative Commons, etc.">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('addAssetModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createAsset()">Add Asset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generate Plan Modal -->
+<div class="modal-backdrop" id="genPlanModal">
+  <div class="modal">
+    <h3>Generate Plan</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date</label>
+        <input class="form-control" id="planDate" type="date">
+      </div>
+      <div class="form-group">
+        <label>Hours</label>
+        <input class="form-control" id="planHours" type="number" value="24" min="1" max="48">
+      </div>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="planMixMusic"> Mix background music</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('genPlanModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="generatePlan()">Generate</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script src="/static/js/admin.js"></script>
+</body>
+</html>

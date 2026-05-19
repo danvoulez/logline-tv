@@ -4,6 +4,7 @@ import enum
 class AssetKind(str, enum.Enum):
     video = "video"
     music = "music"
+    bumper = "bumper"
 
 
 class SourceType(str, enum.Enum):

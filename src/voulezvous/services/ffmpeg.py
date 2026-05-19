@@ -71,6 +71,8 @@ async def mix_audio(
 async def stream_to_target(input_path: Path, target: str) -> tuple[int, str]:
     if target == "null":
         args = ["-y", "-re", "-i", str(input_path), "-f", "null", "-"]
+    elif target == "hls":
+        return await stream_to_hls(input_path)
     else:
         args = [
             "-re",
@@ -79,6 +81,27 @@ async def stream_to_target(input_path: Path, target: str) -> tuple[int, str]:
             "-f", "flv",
             target,
         ]
+    rc, _, stderr = await run_ffmpeg(args)
+    return rc, stderr
+
+
+async def stream_to_hls(input_path: Path) -> tuple[int, str]:
+    hls_dir = settings.spool_hls
+    hls_dir.mkdir(parents=True, exist_ok=True)
+    playlist = hls_dir / "stream.m3u8"
+
+    args = [
+        "-re",
+        "-i", str(input_path),
+        "-c:v", "copy",
+        "-c:a", "copy",
+        "-f", "hls",
+        "-hls_time", str(settings.hls_segment_duration),
+        "-hls_list_size", str(settings.hls_playlist_size),
+        "-hls_flags", "delete_segments+append_list",
+        "-hls_segment_filename", str(hls_dir / "seg_%05d.ts"),
+        str(playlist),
+    ]
     rc, _, stderr = await run_ffmpeg(args)
     return rc, stderr
 

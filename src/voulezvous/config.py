@@ -25,6 +25,17 @@ class Settings(BaseSettings):
     house_frame_rate: int = 30
     house_audio_sample_rate: int = 48000
 
+    # HLS settings
+    hls_segment_duration: int = 6
+    hls_playlist_size: int = 10
+
+    # Cloudflare R2 settings
+    cloudflare_account_id: str = ""
+    cloudflare_r2_bucket: str = "voulezvous-hls"
+    cloudflare_r2_access_key: str = ""
+    cloudflare_r2_secret_key: str = ""
+    cloudflare_r2_public_url: str = ""
+
     log_level: str = "INFO"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
@@ -50,8 +61,20 @@ class Settings(BaseSettings):
         return self.spool_root / "reports"
 
     @property
+    def spool_hls(self) -> Path:
+        return self.spool_root / "hls"
+
+    @property
     def fallback_video_path(self) -> Path:
         return self.spool_fallback / self.fallback_video
+
+    @property
+    def r2_enabled(self) -> bool:
+        return bool(
+            self.cloudflare_account_id
+            and self.cloudflare_r2_access_key
+            and self.cloudflare_r2_secret_key
+        )
 
     def ensure_spool_dirs(self) -> None:
         for d in [
@@ -60,6 +83,7 @@ class Settings(BaseSettings):
             self.spool_fallback,
             self.spool_tmp,
             self.spool_reports,
+            self.spool_hls,
         ]:
             d.mkdir(parents=True, exist_ok=True)
 
