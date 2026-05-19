@@ -71,6 +71,34 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Acquisition subsystem — seed + orchestrator run
+  acq-seed:
+    build: .
+    command: app seed-acquisition-data
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
+      DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["acq"]
+
+  acq-orchestrator:
+    build: .
+    command: app orchestrator run-daily
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
+      DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
+      SPOOL_ROOT: /spool
+    volumes:
+      - spool:/spool
+      - browser_profiles:/spool/browser_profiles
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["acq"]
+
 volumes:
   pgdata:
   spool:
+  browser_profiles:
