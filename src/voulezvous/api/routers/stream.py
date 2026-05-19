@@ -27,3 +27,11 @@ async def stream_status():
         if streamer_state.current_item_id
         else None,
     }
+
+
+@router.post("/sync-r2")
+async def sync_r2():
+    from voulezvous.services.r2_upload import sync_hls_dir
+
+    count = await sync_hls_dir()
+    return {"uploaded": count}
