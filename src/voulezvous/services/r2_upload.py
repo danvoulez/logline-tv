@@ -39,8 +39,10 @@ async def upload_file_wrangler(local_path: Path, r2_key: str) -> bool:
     return True
 
 
-def upload_file_boto3(local_path: Path, r2_key: str) -> str:
-    """Upload a single file to R2 via boto3 S3 API. Returns the public URL."""
+def _upload_file_boto3_sync(local_path: Path, r2_key: str) -> str:
+    """Synchronous boto3 upload — always call via asyncio.to_thread()."""
+    import mimetypes
+
     import boto3
 
     client = boto3.client(
@@ -50,8 +52,6 @@ def upload_file_boto3(local_path: Path, r2_key: str) -> str:
         aws_secret_access_key=settings.cloudflare_r2_secret_key,
         region_name="auto",
     )
-
-    import mimetypes
 
     content_type = mimetypes.guess_type(str(local_path))[0] or "application/octet-stream"
     if local_path.suffix == ".m3u8":
@@ -72,8 +72,50 @@ def upload_file_boto3(local_path: Path, r2_key: str) -> str:
     return f"https://{settings.cloudflare_r2_bucket}.r2.dev/{r2_key}"
 
 
+async def upload_file_boto3(local_path: Path, r2_key: str) -> str:
+    """Upload a single file to R2 via boto3, off the event loop."""
+    return await asyncio.to_thread(_upload_file_boto3_sync, local_path, r2_key)
+
+
+def _boto3_client():
+    import boto3
+    return boto3.client(
+        "s3",
+        endpoint_url=f"https://{settings.cloudflare_account_id}.r2.cloudflarestorage.com",
+        aws_access_key_id=settings.cloudflare_r2_access_key,
+        aws_secret_access_key=settings.cloudflare_r2_secret_key,
+        region_name="auto",
+    )
+
+
+def _list_r2_ts_keys_sync() -> set[str]:
+    client = _boto3_client()
+    keys: set[str] = set()
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=settings.cloudflare_r2_bucket, Prefix="hls/"):
+        for obj in page.get("Contents", []):
+            if obj["Key"].endswith(".ts"):
+                keys.add(obj["Key"])
+    return keys
+
+
+def _delete_r2_keys_sync(keys: list[str]) -> None:
+    if not keys:
+        return
+    client = _boto3_client()
+    objects = [{"Key": k} for k in keys]
+    client.delete_objects(
+        Bucket=settings.cloudflare_r2_bucket,
+        Delete={"Objects": objects, "Quiet": True},
+    )
+    logger.info("r2_pruned", count=len(keys))
+
+
 async def sync_hls_dir() -> int:
-    """Upload all HLS files from spool to R2. Returns count of files uploaded."""
+    """Upload local HLS files to R2 and prune segments no longer on disk.
+
+    Returns count of files uploaded.
+    """
     hls_dir = settings.spool_hls
     if not hls_dir.exists():
         return 0
@@ -83,18 +125,29 @@ async def sync_hls_dir() -> int:
         logger.debug("r2_sync_skipped", reason="neither wrangler nor r2 credentials configured")
         return 0
 
+    local_files = {f for f in hls_dir.iterdir() if f.suffix in (".m3u8", ".ts")}
+    local_keys = {f"hls/{f.name}" for f in local_files}
+
     count = 0
-    for f in sorted(hls_dir.iterdir()):
-        if f.suffix not in (".m3u8", ".ts"):
-            continue
+    for f in sorted(local_files):
         r2_key = f"hls/{f.name}"
         if use_wrangler:
             ok = await upload_file_wrangler(f, r2_key)
             if ok:
                 count += 1
         else:
-            upload_file_boto3(f, r2_key)
+            await upload_file_boto3(f, r2_key)
             count += 1
+
+    # Prune stale .ts segments from R2 (boto3 only — wrangler has no list API)
+    if not use_wrangler and settings.r2_enabled:
+        try:
+            remote_keys = await asyncio.to_thread(_list_r2_ts_keys_sync)
+            stale = list(remote_keys - local_keys)
+            if stale:
+                await asyncio.to_thread(_delete_r2_keys_sync, stale)
+        except Exception as e:
+            logger.warning("r2_prune_failed", error=str(e))
 
     logger.info("r2_sync_complete", files=count, mode="wrangler" if use_wrangler else "boto3")
     return count

@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -23,10 +23,30 @@ from voulezvous.services.ffmpeg import mix_audio, normalize_video
 logger = structlog.get_logger()
 
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+_STALE_PREPARING_TIMEOUT = timedelta(minutes=60)
+
+
+async def _reset_stale_preparing(db: AsyncSession) -> None:
+    """Reset items that have been stuck in 'preparing' for > 60 min.
+
+    Uses updated_at (stamped when prep_status was set) as the clock. Only runs
+    in the prep-worker, not on API startup, so it never races with active workers.
+    """
+    cutoff = datetime.now(timezone.utc) - _STALE_PREPARING_TIMEOUT
+    result = await db.execute(
+        update(StreamPlanItem)
+        .where(StreamPlanItem.prep_status == PrepStatus.preparing)
+        .where(StreamPlanItem.updated_at < cutoff)
+        .values(prep_status=PrepStatus.queued)
+    )
+    await db.commit()
+    if result.rowcount:
+        logger.warning("prep_worker.reset_stale", count=result.rowcount, cutoff=cutoff.isoformat())
 
 
 async def run_prep_cycle(db: AsyncSession) -> int:
     settings.ensure_spool_dirs()
+    await _reset_stale_preparing(db)
 
     processed = 0
     touched_plan_ids = set()

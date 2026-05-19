@@ -113,7 +113,7 @@ async def stream_to_hls_once(input_path: Path) -> tuple[int, str]:
         "-f", "hls",
         "-hls_time", str(settings.hls_segment_duration),
         "-hls_list_size", str(settings.hls_playlist_size),
-        "-hls_flags", "delete_segments+append_list+omit_endlist+program_date_time+independent_segments",
+        "-hls_flags", "delete_segments+append_list+omit_endlist+program_date_time+independent_segments+discont_start",
         "-hls_delete_threshold", "3",
         "-hls_segment_filename", str(hls_dir / "seg_%05d.ts"),
         str(playlist),
