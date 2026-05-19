@@ -213,7 +213,45 @@ async def block_asset(asset_id: str, reason: str = "blocked via MCP") -> dict:
 
 @mcp.tool()
 async def generate_plan(hours: int = 24) -> dict:
-    """Force a new broadcast plan right now. Only works if queue < 4h."""
+    """Force a new broadcast plan right now. Only works if queue < 4h.
+    Fails if library has zero approved videos."""
     async with async_session() as db:
         result = await tool_generate_plan(db, GeneratePlanArgs(hours=hours))
     return result
+
+
+@mcp.tool()
+async def run_cleanup() -> dict:
+    """Delete orphan files in /spool/downloads and /spool/prepared to free disk space.
+    Returns bytes freed in each spool directory."""
+    async with async_session() as db:
+        from voulezvous.services.cleanup import run_cleanup_cycle
+        result = await run_cleanup_cycle(db)
+    return result
+
+
+@mcp.tool()
+async def get_stuck_prep_items() -> list:
+    """List plan items stuck in prep_status=failed. These won't auto-retry.
+    Returns item IDs, asset titles, and error logs."""
+    from voulezvous.models.enums import PrepStatus
+    from voulezvous.models.tables import StreamPlanItem
+    from sqlalchemy.orm import selectinload
+    async with async_session() as db:
+        rows = (await db.execute(
+            select(StreamPlanItem)
+            .where(StreamPlanItem.prep_status == PrepStatus.failed)
+            .options(selectinload(StreamPlanItem.video_asset))
+            .order_by(StreamPlanItem.created_at.desc())
+            .limit(20)
+        )).scalars().all()
+    return [
+        {
+            "item_id": str(r.id),
+            "asset_title": r.video_asset.title if r.video_asset else "—",
+            "asset_id": str(r.video_asset_id),
+            "error": r.error_log,
+            "plan_id": str(r.stream_plan_id),
+        }
+        for r in rows
+    ]
