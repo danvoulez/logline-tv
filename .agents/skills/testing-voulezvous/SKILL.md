@@ -1,6 +1,6 @@
 ---
 name: testing-voulezvous
-description: End-to-end testing of the Voulezvous streaming engine MVP. Use when verifying API, workers, Docker Compose, or schema changes.
+description: End-to-end testing of the Voulezvous streaming engine MVP. Use when verifying API, workers, Docker Compose, UI, or R2 integration changes.
 ---
 
 # Testing the Voulezvous Streaming Engine
@@ -8,7 +8,13 @@ description: End-to-end testing of the Voulezvous streaming engine MVP. Use when
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- No external secrets needed — the app runs with local Postgres via Docker Compose
+- For R2 sync tests: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY`, `CLOUDFLARE_R2_SECRET_KEY` secrets
+
+## Devin Secrets Needed
+
+- `CLOUDFLARE_ACCOUNT_ID` — Cloudflare account ID (org secret)
+- `CLOUDFLARE_R2_ACCESS_KEY` — R2 S3-compatible access key with Object Read & Write permission (org secret)
+- `CLOUDFLARE_R2_SECRET_KEY` — R2 S3-compatible secret key (org secret)
 
 ## Environment Setup
 
@@ -25,16 +31,22 @@ docker compose ps
 # migrate container exits after running — that's normal
 ```
 
+Seed demo data:
+```bash
+docker compose exec api app seed-demo-data
+# Creates: 3 approved videos, 2 pending music assets
+```
+
 ## Key Gotchas
 
-- **Enum types**: The SQLAlchemy models use `Enum(..., native_enum=False)` to store enum values as VARCHAR strings. If you see errors like `type "assetkind" does not exist`, it means the models are trying to use native Postgres enums that don't match the migration. Fix: ensure all enum columns in `src/voulezvous/models/tables.py` use `Enum(EnumClass, native_enum=False)`.
-- **Prep duration**: A 1-hour plan with 10-second seed clips generates 360 items. Full prep takes ~1 hour. For testing, interrupt after 10-20 items to verify the pipeline works.
-- **Seed data**: `docker compose exec api app seed-demo-data` creates 3 approved video assets + 2 pending music assets. Running it multiple times adds duplicates.
-- **Migration driver**: Alembic needs `psycopg2-binary` (sync driver) even though the app uses `asyncpg`. Both must be in dependencies.
+- **Starlette 1.0 TemplateResponse**: The Docker image may install Starlette 1.0+ which changed `TemplateResponse` signature from `TemplateResponse(name, {"request": request})` to `TemplateResponse(request, name)`. If `/` or `/admin` return 500 errors, check this.
+- **Enum types**: The SQLAlchemy models use `Enum(..., native_enum=False)` to store enum values as VARCHAR strings. If you see errors like `type "assetkind" does not exist`, ensure all enum columns use `native_enum=False`.
+- **Prep duration**: A 1-hour plan with 10-second seed clips generates 360+ items. Full prep takes a long time. For testing, interrupt after 10-20 items.
+- **Seed data**: `seed-demo-data` creates 3 approved videos + 2 pending music. Running it multiple times adds duplicates.
+- **R2 credentials in Docker**: The docker-compose.yml does NOT include R2 credentials by default. To test R2 sync, temporarily add `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY`, `CLOUDFLARE_R2_SECRET_KEY`, and `CLOUDFLARE_R2_BUCKET` to the API service environment block, then restart the API container. Revert after testing.
+- **Migration driver**: Alembic needs `psycopg2-binary` (sync driver) even though the app uses `asyncpg`.
 
-## Test Sequence
-
-All tests are shell/curl based — no browser recording needed.
+## Test Sequence — API Tests (Shell/Curl)
 
 ### 1. Health Check
 ```bash
@@ -44,13 +56,11 @@ curl -s http://localhost:8000/health
 
 ### 2. Rights Compliance Gate (Negative Test)
 ```bash
-# Register unapproved asset
 curl -s -X POST http://localhost:8000/assets \
   -H "Content-Type: application/json" \
   -d '{"kind":"video","title":"Test","source_type":"direct_url","source_url":"https://example.com/test.mp4"}'
 # Expect: rights_status=pending_review, status=registered
 
-# Try generating plan with no approved assets
 curl -s -X POST http://localhost:8000/plans/generate \
   -H "Content-Type: application/json" \
   -d '{"plan_date":"2025-06-01","hours":1}'
@@ -59,47 +69,82 @@ curl -s -X POST http://localhost:8000/plans/generate \
 
 ### 3. Full Lifecycle
 ```bash
-# Seed demo data
 docker compose exec api app seed-demo-data
-
-# Verify assets
 curl -s http://localhost:8000/assets
-# Expect: 3 videos (approved_for_stream/approved), 2 music (pending_review/registered)
+# Expect: 3 videos (approved), 2 music (pending)
+
+curl -s -X POST http://localhost:8000/plans/generate \
+  -H "Content-Type: application/json" \
+  -d '{"plan_date":"2025-06-01","hours":1}'
+# Expect: HTTP 201, status=draft, items non-empty
+
+curl -s -X POST http://localhost:8000/plans/{plan_id}/approve
+# Expect: status=approved
+```
+
+### 4. R2 Sync Test
+```bash
+# Create test HLS file inside the API container
+docker compose exec api bash -c 'mkdir -p /spool/hls && echo "#EXTM3U" > /spool/hls/test.m3u8'
+
+# Trigger sync
+curl -s -X POST http://localhost:8000/stream/sync-r2
+# Expect: {"uploaded":1}
+
+# Verify in R2 (from host, using boto3)
+python3 -c "
+import boto3, os
+c = boto3.client('s3',
+    endpoint_url=f'https://{os.environ["CLOUDFLARE_ACCOUNT_ID"]}.r2.cloudflarestorage.com',
+    aws_access_key_id=os.environ['CLOUDFLARE_R2_ACCESS_KEY'],
+    aws_secret_access_key=os.environ['CLOUDFLARE_R2_SECRET_KEY'],
+    region_name='auto')
+print(c.list_objects_v2(Bucket='voulezvous-hls', Prefix='hls/test'))"
+# Expect: hls/test.m3u8 in Contents
+```
+
+### 5. Bumper Plan Verification (API)
+```bash
+# First create and approve a bumper asset
+curl -s -X POST http://localhost:8000/assets \
+  -H "Content-Type: application/json" \
+  -d '{"kind":"bumper","title":"Test Bumper","source_type":"direct_url","source_url":"https://example.com/bumper.mp4","duration_sec":5}'
+# Approve it
+curl -s -X PATCH http://localhost:8000/assets/{bumper_id} \
+  -H "Content-Type: application/json" \
+  -d '{"rights_status":"approved_for_stream"}'
 
 # Generate plan
 curl -s -X POST http://localhost:8000/plans/generate \
   -H "Content-Type: application/json" \
-  -d '{"plan_date":"2025-06-01","hours":1}'
-# Expect: HTTP 201, status=draft, items non-empty, total target_duration_sec >= 3600
-
-# Approve plan (use plan_id from response)
-curl -s -X POST http://localhost:8000/plans/{plan_id}/approve
-# Expect: status=approved
-
-# Run prep (may take a long time for many items)
-curl -s -X POST http://localhost:8000/prep/run-once
-# Expect: processed > 0; check plan items for prep_status=ready
-
-# Generate report
-docker compose exec api app reporter --date 2025-06-01
-curl -s http://localhost:8000/reports/2025-06-01
-# Expect: HTTP 200, status=generated, planned_hours > 0, suggestions non-empty
+  -d '{"plan_date":"2025-06-02","hours":1,"mix_music":true}'
+# Expect: Items alternate 10s (video) / 5s (bumper)
+# First item (#0) should be video (10s), not bumper
 ```
 
-### 4. Asset Approval/Block Auto-Sync
-```bash
-# Create asset, then approve
-curl -s -X PATCH http://localhost:8000/assets/{id} \
-  -H "Content-Type: application/json" \
-  -d '{"rights_status":"approved_for_stream"}'
-# Expect: rights_status=approved_for_stream AND status=approved
+## Test Sequence — UI Tests (Browser Recording)
 
-# Block the asset
-curl -s -X PATCH http://localhost:8000/assets/{id} \
-  -H "Content-Type: application/json" \
-  -d '{"rights_status":"blocked"}'
-# Expect: rights_status=blocked AND status=blocked
-```
+These tests require a screen recording.
+
+### Admin Dashboard (http://localhost:8000/admin)
+1. Navigate to `/admin` — verify dashboard loads with stat cards, sidebar, stream status
+2. Click "Assets" — verify assets table with Kind/Rights/Status badges
+3. Click "+ Add Asset" — fill Kind=Bumper, Title, Source URL, Duration=5 → click Add
+4. Verify: yellow BUMPER badge, PENDING rights, toast "Asset created"
+5. Click "Approve" on bumper row — verify green APPROVED badge, toast
+6. Click "Plans" → "+ Generate Plan" → Date=today, Hours=1, check Mix music → Generate
+7. Verify: plan shows alternating 10s/5s items (bumpers inserted between videos)
+8. Click "Approve Plan" — verify status → APPROVED, "Run Prep" button appears
+
+### Client Player (http://localhost:8000/)
+1. Navigate to `/` — verify:
+   - Black background
+   - Dark grey video container
+   - Centered hot pink (#FF1493) circular play button with glow
+   - "VOULEZVOUS" branding in hot pink below video
+   - ".TV" sub-branding text
+   - "Off air" status indicator with dot
+2. Click play button — verify overlay hides, shows "Stream offline — retrying..."
 
 ## Lint & Tests
 
