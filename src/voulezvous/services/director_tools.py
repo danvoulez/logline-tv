@@ -9,6 +9,7 @@ Python directly. The Director loop validates and dispatches here.
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import date
 from typing import Any
@@ -43,6 +44,18 @@ from voulezvous.services.planner import generate_plan
 from voulezvous.services.stream_control import request_stream_start
 
 logger = structlog.get_logger()
+
+# Acquisition/discovery tools are disabled by default during Phase 4
+# Set DIRECTOR_ENABLE_ACQUISITION=true to enable them
+DIRECTOR_ENABLE_ACQUISITION = os.environ.get("DIRECTOR_ENABLE_ACQUISITION", "false").lower() == "true"
+
+# Tools that require acquisition/discovery to be enabled
+ACQUISITION_TOOLS = {
+    "run_discovery",
+    "run_user_discovery",
+    "run_enrichment",
+    "promote_candidate",
+}
 
 
 class ToolError(Exception):
@@ -324,6 +337,10 @@ async def execute_action(db: AsyncSession, verb: str, args_raw: dict) -> tuple[s
     """
     if verb not in TOOLS:
         return "rejected", None, f"unknown verb: {verb}"
+
+    # Reject acquisition/discovery tools if not enabled
+    if verb in ACQUISITION_TOOLS and not DIRECTOR_ENABLE_ACQUISITION:
+        return "rejected", None, f"acquisition tool '{verb}' disabled (set DIRECTOR_ENABLE_ACQUISITION=true to enable)"
 
     schema_cls, func = TOOLS[verb]
     try:

@@ -5,9 +5,18 @@ from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from voulezvous.acquisition.models import (  # noqa: F401
+    CandidateAsset,
+    DiscoveryRun,
+    DomainPolicy,
+    RetrievalAdapter,
+    SearchKeyword,
+)
 from voulezvous.models.base import Base
 from voulezvous.models.tables import (  # noqa: F401
     DailyReport,
+    DirectorAction,
+    DirectorRun,
     LibraryAsset,
     PrepJob,
     StreamControl,
