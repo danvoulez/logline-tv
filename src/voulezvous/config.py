@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     spool_root: Path = Path("/spool")
 
-    stream_target: str = "null"
+    stream_target: str = "hls"
     fallback_video: str = "fallback.mp4"
 
     prep_lookahead_hours: int = 6

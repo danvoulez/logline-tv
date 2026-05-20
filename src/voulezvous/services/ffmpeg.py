@@ -86,7 +86,14 @@ async def stream_to_target(input_path: Path, target: str) -> tuple[int, str]:
     rc=0 → success. Otherwise we retry up to 3 times (waits 2s, 8s, 30s).
     HLS goes through stream_to_hls() which has its own retry path.
     """
-    if target == "hls":
+    # Detect HLS mode: explicit "hls" string, .m3u8 file, or exact hls directory path
+    is_hls_mode = (
+        target == "hls"
+        or target.endswith(".m3u8")
+        or target == str(settings.spool_hls)
+    )
+
+    if is_hls_mode:
         return await stream_to_hls(input_path)
 
     if target == "null":
