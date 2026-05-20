@@ -5,15 +5,19 @@ set -e
 # Usage: ./scripts/generate_plan.sh [hours]
 
 HOURS="${1:-24}"
+PLAN_DATE="${PLAN_DATE:-$(date +%Y-%m-%d)}"
 API_BASE="${API_BASE:-http://localhost:8000}"
 
 echo "=== Generating Plan ==="
+echo "Plan date: ${PLAN_DATE}"
 echo "Duration: ${HOURS} hours"
 echo "API base: ${API_BASE}"
 echo ""
 
 # Generate plan and capture PLAN_ID
-PLAN_JSON=$(curl -s -X POST "${API_BASE}/plans/generate?hours=${HOURS}")
+PLAN_JSON=$(curl -s -X POST "${API_BASE}/plans/generate" \
+  -H "Content-Type: application/json" \
+  -d "{\"plan_date\": \"${PLAN_DATE}\", \"hours\": ${HOURS}, \"mix_music\": false}")
 PLAN_ID=$(echo "${PLAN_JSON}" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])" 2>/dev/null)
 
 if [ -z "${PLAN_ID}" ]; then
