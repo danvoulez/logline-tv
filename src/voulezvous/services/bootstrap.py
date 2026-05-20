@@ -30,7 +30,7 @@ async def generate_test_media() -> None:
     test_videos = [
         ("test1.mp4", "color=c=black", "440"),
         ("test2.mp4", "color=c=red", "880"),
-        ("test3.mp4", "testsrc=size=1920x1080:rate=30", "220"),
+        ("test3.mp4", "color=c=blue", "220"),
     ]
 
     w, h = settings.house_resolution.split("x")
@@ -41,11 +41,7 @@ async def generate_test_media() -> None:
             logger.info("bootstrap.test_video_exists", path=str(output_path))
             continue
 
-        # Handle different filter formats
-        if "testsrc" in video_filter:
-            video_input = video_filter
-        else:
-            video_input = f"{video_filter}:s={w}x{h}:d=10:r={settings.house_frame_rate}"
+        video_input = f"{video_filter}:s={w}x{h}:d=10:r={settings.house_frame_rate}"
 
         args = [
             "-y",
