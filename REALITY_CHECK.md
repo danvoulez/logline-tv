@@ -1199,6 +1199,122 @@ cd ~/logline-tv && uv run python -m compileall src/ tests/
 # Output: Compilation successful (no syntax errors)
 ```
 
+### Phase 5 Lab DB Closure Receipt
+
+```bash
+# Step 1: Sync local and lab
+cd ~/logline-tv && git fetch origin && git checkout harden-real-runtime && git pull --ff-only
+
+# Output: Already up to date.
+
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && git fetch origin && git checkout harden-real-runtime && git pull --ff-only'
+
+# Output: Fast-forward from 9c59077..1e9e0ad
+# 6 files changed, 747 insertions(+), 58 deletions(-)
+
+# Step 2: Clean lab core start without Director/acquisition
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose down -v && docker compose up -d --build db migrate api prep-worker streamer'
+
+# Output: Services started successfully
+# Container logline-tv-director-1 stopped and removed (from previous run)
+
+# Verification: Only core services running
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose ps'
+
+# Output:
+# NAME                       IMAGE                    COMMAND                  SERVICE       CREATED          STATUS                    PORTS
+# logline-tv-api-1           logline-tv-api           "app api --host 0.0.…"   api           15 seconds ago   Up 8 seconds              0.0.0.0:8000->8000/tcp
+# logline-tv-db-1            postgres:16-alpine       "docker-entrypoint.s…"   db            15 seconds ago   Up 14 seconds (healthy)   0.0.0.0:5432->5432/tcp
+# logline-tv-prep-worker-1   logline-tv-prep-worker   "app prep-worker --i…"   prep-worker   15 seconds ago   Up 8 seconds              8000/tcp
+# logline-tv-streamer-1      logline-tv-streamer      "app streamer"           streamer      15 seconds ago   Up 8 seconds              8000/tcp
+
+# Verification: No director, no acq-orchestrator running
+
+# Step 3: Verify acquisition tables exist after migrations
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT table_name FROM information_schema.tables WHERE table_schema = '\''public'\'' AND table_name IN ('\''discovery_runs'\'', '\''candidate_assets'\'', '\''retrieval_adapters'\'', '\''domain_policies'\'', '\''search_keywords'\'', '\''lineup_runs'\'', '\''lineup_items'\'', '\''media_ir_jobs'\'', '\''asset_enrichments'\'', '\''autonomy_reports'\'') ORDER BY table_name;"'
+
+# Output: All 10 acquisition tables present
+# asset_enrichments, autonomy_reports, candidate_assets, discovery_runs, domain_policies, lineup_items, lineup_runs, media_ir_jobs, retrieval_adapters, search_keywords
+
+# Step 4: Verify acquisition does not run by default
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT COUNT(*) AS discovery_runs FROM discovery_runs; SELECT COUNT(*) AS candidate_assets FROM candidate_assets; SELECT COUNT(*) AS library_assets FROM library_assets;"'
+
+# Output: All counts are 0
+# No acquisition run created by default
+# No candidate assets created by default
+# No library assets created by default
+
+# Step 5: Start acquisition explicitly with profile
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose --profile acq up -d acq-orchestrator'
+
+# Output: acq-orchestrator built and started
+
+# Logs:
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose logs acq-orchestrator --tail 120'
+
+# Output:
+# {"step": "discovery", "mode": "simulated", "found": 0}
+# {"step": "lineup_generation", "reason": "No approved assets available for lineup generation"}
+# Orchestration result: success=False, errors=[{"step": "lineup_generation", "error": "No approved assets available for lineup generation"}]
+
+# Verification: Exits cleanly because no sites/keywords configured
+# Verification: Records no fake success (found: 0)
+# Verification: Fails honestly with reason
+# Verification: Creates no streamable assets from nothing
+
+# Step 6: Lab DB probe after explicit acq profile
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT id, run_date, status, input_summary, output_summary, created_at FROM discovery_runs ORDER BY created_at DESC LIMIT 10;"'
+
+# Output:
+# id: bc6b4d83-872a-41ec-bebb-3bba1d58cfbb
+# run_date: 2026-05-20
+# status: completed
+# input_summary: {"mode": "simulated", "domains": [], "exclude_keywords": [], "include_keywords": []}
+# output_summary: {"mode": "simulated", "total_found": 0, "total_accepted": 0, "total_metadata_only": 0}
+
+# Verification: Discovery run is explicitly labeled "simulated"
+# Verification: total_found: 0 (honest - no fake candidates)
+# Verification: total_accepted: 0 (no promotable candidates)
+
+# Candidate probe:
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT id, title, rights_status, retrieval_status FROM candidate_assets ORDER BY created_at DESC LIMIT 20;"'
+
+# Output: 0 rows
+# Verification: No candidates created (because no config)
+
+# Library asset probe:
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew shellenv zsh)" && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT id, title, rights_status, status FROM library_assets ORDER BY created_at DESC LIMIT 20;"'
+
+# Output: 0 rows
+# Verification: No library assets created
+```
+
+## Release Candidate — harden-real-runtime
+
+Verified:
+- local ruff: All checks passed
+- local pytest: 75 passed, 37 warnings
+- local compileall: Passed
+- Docker lab core stack: Verified (db, api, prep-worker, streamer running)
+- Postgres migrations: Verified (7 migrations, 20 tables including 10 acquisition tables)
+- HLS browser playback: Verified from previous admission
+- Director isolation: Verified (Director behind profile, does not start with core admission)
+- acquisition isolation: Verified (acq-orchestrator behind acq profile, does not start with core admission)
+- acquisition tables: Verified (all 10 acquisition tables present after migration)
+- acquisition default behavior: Verified (no acquisition run created by default, no candidates, no library assets)
+- simulated discovery labeling: Verified (discovery run explicitly labeled "simulated" in input_summary/output_summary)
+- acquisition honesty: Verified (found: 0, accepted: 0, no fake success when no config)
+- promotion gates: Verified via local tests (metadata_only and unauthorized candidates rejected)
+
+Not production-ready:
+- no 24h burn-in
+- no production CDN
+- no viewer analytics
+- real external acquisition not validated
+- credentials/secret management not hardened
+- Postgres CI not automated (CI added but no Docker integration)
+- FK cycle warning still present (candidate_assets ↔ retrieval_adapters)
+
 ## Next Steps
 
 1. ✅ Set up Docker environment (completed on lab-512 with colima)
