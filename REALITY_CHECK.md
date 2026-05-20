@@ -639,23 +639,23 @@ Video playing? true Current time: 44.959787
 # - Local admission: verified (ruff passes, 54 tests pass, compileall passes)
 ```
 
-**Phase 3**: ✅ COMPLETE
+**Phase 3**: ✅ COMPLETE (with honest audit)
 
 ### Operation Safety contracts:
-- [x] Missing prepared file produces item_failed event with reason (verified)
-- [x] Corrupt media produces item_failed event with reason (verified)
-- [x] Missing fallback is created or startup fails loudly (verified)
-- [x] HLS cleanup keeps segment count bounded (FIXED - see finding below)
-- [x] Streamer restart resumes HLS output or enters explicit fallback (verified)
-- [x] Queue exhaustion is visible as fallback_started or idle state (verified)
-- [x] Health/snapshot endpoint exposes current stream state (verified)
-- [x] Worker errors are logged structurally with item/plan ids where applicable (verified)
-- [x] No Director starts during core operation safety admission (verified)
+- [x] Missing prepared file produces item_failed event with reason (implemented, runtime verified)
+- [x] Corrupt media produces item_failed event with reason (implemented, runtime verified)
+- [x] Missing fallback is created or startup fails loudly (implemented in bootstrap.py)
+- [x] HLS cleanup keeps segment count bounded (implemented in cleanup.py, runtime verified)
+- [x] Streamer restart resumes HLS output or enters explicit fallback (implemented in streamer.py)
+- [x] Queue exhaustion is visible as fallback_started or idle state (implemented in streamer.py)
+- [x] Health/snapshot endpoint exposes current stream state (implemented in observability.py)
+- [x] Worker errors are logged structurally with item/plan ids where applicable (implemented in streamer.py)
+- [x] No Director starts during core operation safety admission (implemented in docker-compose.yml, verified)
 
 ### Current state:
-- Restart safety: verified (streamer restart recovery working)
-- Error handling: verified (missing file and corrupt media failure paths working)
-- Cleanup: verified (HLS segment cleanup implemented and tested)
+- Restart safety: implemented (streamer reads database state on startup)
+- Error handling: implemented (missing file and corrupt media failure paths in streamer.py)
+- Cleanup: implemented (HLS segment cleanup in cleanup.py, runtime verified on lab)
 
 ### HLS Cleanup Finding (FIXED):
 ```bash
@@ -928,6 +928,47 @@ tests/test_reporter.py: 2 warnings
 54 passed, 21 warnings in 7.27s
 
 # Verification: All tests passing - no regressions introduced by Phase 3 changes
+```
+
+### Phase 3 Code Audit
+```bash
+# Command: Git audit - files changed after Phase 2.5
+cd /Users/ubl-ops/logline-tv && git diff --name-only 4a6f084..HEAD
+
+# Output: Only 2 files changed
+REALITY_CHECK.md
+src/voulezvous/services/cleanup.py
+
+# Command: Verify cleanup function exists
+cd /Users/ubl-ops/logline-tv && grep -R "cleanup_orphan_hls_segments" -n src
+
+# Output: Function exists in cleanup.py
+src/voulezvous/services/cleanup.py:105:async def cleanup_orphan_hls_segments(db: AsyncSession) -> dict:
+src/voulezvous/services/cleanup.py:167:    hls = await cleanup_orphan_hls_segments(db)
+
+# Command: Verify missing prepared file handling
+cd /Users/ubl-ops/logline-tv && grep -R "prepared_file_missing" -n src
+
+# Output: Handling exists in streamer.py
+src/voulezvous/services/streamer.py:130:        logger.warning("prepared_file_missing", item_id=str(item.id))
+
+# Command: Verify item_failed event usage
+cd /Users/ubl-ops/logline-tv && grep -R "item_failed" -n src
+
+# Output: item_failed enum and usage in streamer.py
+src/voulezvous/models/enums.py:74:    item_failed = "item_failed"
+src/voulezvous/services/streamer.py:138:            EventType.item_failed,
+src/voulezvous/services/streamer.py:179:            EventType.item_failed
+
+# Code audit classification:
+# - cleanup_orphan_hls_segments: implemented + runtime verified (no unit test)
+# - missing prepared file failure: implemented + runtime verified (no unit test)
+# - corrupt media failure: implemented + runtime verified (no unit test)
+# - queue exhaustion/fallback: implemented + runtime verified (no unit test)
+# - restart recovery: implemented (no unit test)
+# - observability endpoint: implemented (no unit test)
+# - worker error logging: implemented (no unit test)
+# - Director isolation: implemented + verified (docker-compose.yml profile)
 ```
 
 **Phase 4**: ⏳ PENDING
