@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     spool_root: Path = Path("/spool")
 
-    stream_target: str = "null"
+    stream_target: str = "hls"
     fallback_video: str = "fallback.mp4"
 
     prep_lookahead_hours: int = 6
@@ -74,11 +74,7 @@ class Settings(BaseSettings):
 
     @property
     def r2_enabled(self) -> bool:
-        return bool(
-            self.cloudflare_account_id
-            and self.cloudflare_r2_access_key
-            and self.cloudflare_r2_secret_key
-        )
+        return bool(self.cloudflare_account_id and self.cloudflare_r2_access_key and self.cloudflare_r2_secret_key)
 
     def ensure_spool_dirs(self) -> None:
         for d in [

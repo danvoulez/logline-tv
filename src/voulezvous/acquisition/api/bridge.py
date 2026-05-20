@@ -70,18 +70,16 @@ async def emit_stream_plan(
 ):
     target_start = body.target_start_at if body else None
     try:
-        plan = await emit_lineup_to_stream_plan(
-            db, lineup_id, target_start_at=target_start
-        )
+        plan = await emit_lineup_to_stream_plan(db, lineup_id, target_start_at=target_start)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
     total_emitted = len(plan.items)
-    lineup_item_count = (await db.execute(
-        sa_select(sa_func.count()).select_from(LineupItem).where(
-            LineupItem.lineup_run_id == lineup_id
+    lineup_item_count = (
+        await db.execute(
+            sa_select(sa_func.count()).select_from(LineupItem).where(LineupItem.lineup_run_id == lineup_id)
         )
-    )).scalar_one()
+    ).scalar_one()
     skipped = lineup_item_count - total_emitted
 
     return EmitResponse(

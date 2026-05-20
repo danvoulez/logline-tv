@@ -50,7 +50,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
       DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
       SPOOL_ROOT: ${SPOOL_ROOT:-/spool}
-      STREAM_TARGET: ${STREAM_TARGET:-null}
+      STREAM_TARGET: ${STREAM_TARGET:-hls}
       FALLBACK_VIDEO: ${FALLBACK_VIDEO:-fallback.mp4}
       PREP_LOOKAHEAD_HOURS: ${PREP_LOOKAHEAD_HOURS:-6}
       DELETE_AFTER_STREAM: ${DELETE_AFTER_STREAM:-true}
@@ -73,7 +73,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
       DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
       SPOOL_ROOT: ${SPOOL_ROOT:-/spool}
-      STREAM_TARGET: ${STREAM_TARGET:-null}
+      STREAM_TARGET: ${STREAM_TARGET:-hls}
       FALLBACK_VIDEO: ${FALLBACK_VIDEO:-fallback.mp4}
       PREP_LOOKAHEAD_HOURS: ${PREP_LOOKAHEAD_HOURS:-6}
       DELETE_AFTER_STREAM: ${DELETE_AFTER_STREAM:-true}
@@ -93,7 +93,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/voulezvous
       DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/voulezvous
       SPOOL_ROOT: ${SPOOL_ROOT:-/spool}
-      STREAM_TARGET: ${STREAM_TARGET:-null}
+      STREAM_TARGET: ${STREAM_TARGET:-hls}
       FALLBACK_VIDEO: ${FALLBACK_VIDEO:-fallback.mp4}
       DELETE_AFTER_STREAM: ${DELETE_AFTER_STREAM:-true}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -105,6 +105,7 @@ services:
     logging: *default-logging
 
   # Autonomous Director — LLM-bounded loop (5-min ticks)
+  # Runs only when profile=director is enabled.
   director:
     build: .
     command: app director
@@ -126,6 +127,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    profiles: ["director"]
     logging: *default-logging
 
   # Acquisition orchestrator — runs only when profile=acq is enabled.

@@ -22,6 +22,32 @@ from voulezvous.services.ffmpeg import mix_audio, normalize_video
 
 logger = structlog.get_logger()
 
+
+def _validate_local_path(path: Path) -> None:
+    """Validate that a local path is within the spool directory for security.
+
+    Args:
+        path: Path to validate
+
+    Raises:
+        ValueError: If path is outside spool directory or contains path traversal
+    """
+    try:
+        # Resolve to absolute path and check for path traversal
+        resolved = path.resolve()
+        spool_root = settings.spool_root.resolve()
+
+        # Check if resolved path is within spool_root
+        try:
+            resolved.relative_to(spool_root)
+        except ValueError:
+            raise ValueError(
+                f"Local path {resolved} is outside spool directory {spool_root}. "
+                "Local files must be under configured spool root."
+            )
+    except Exception as e:
+        raise ValueError(f"Invalid local path {path}: {e}")
+
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _STALE_PREPARING_TIMEOUT = timedelta(minutes=60)
 
@@ -70,9 +96,7 @@ async def run_prep_cycle(db: AsyncSession) -> int:
         result = await db.execute(q_check)
         all_items = list(result.scalars().all())
         if all_items and all(i.prep_status == PrepStatus.ready for i in all_items):
-            await db.execute(
-                update(StreamPlan).where(StreamPlan.id == plan_id).values(status=PlanStatus.ready)
-            )
+            await db.execute(update(StreamPlan).where(StreamPlan.id == plan_id).values(status=PlanStatus.ready))
             await db.commit()
 
     return processed
@@ -126,8 +150,7 @@ async def prepare_item(db: AsyncSession, item: StreamPlanItem) -> None:
 
     if video_asset.rights_status != RightsStatus.approved_for_stream:
         raise ValueError(
-            f"Asset {video_asset.id} rights_status={video_asset.rights_status}, "
-            "must be approved_for_stream"
+            f"Asset {video_asset.id} rights_status={video_asset.rights_status}, must be approved_for_stream"
         )
 
     item.prep_status = PrepStatus.preparing
@@ -137,7 +160,9 @@ async def prepare_item(db: AsyncSession, item: StreamPlanItem) -> None:
 
     normalized_path = settings.spool_prepared / f"{item.id}_norm.mp4"
     job_norm = PrepJob(
-        plan_item_id=item.id, job_type=JobType.normalize, status=JobStatus.running,
+        plan_item_id=item.id,
+        job_type=JobType.normalize,
+        status=JobStatus.running,
         started_at=datetime.now(timezone.utc),
     )
     db.add(job_norm)
@@ -158,14 +183,14 @@ async def prepare_item(db: AsyncSession, item: StreamPlanItem) -> None:
     if item.mix_enabled and item.music_asset:
         music_asset = item.music_asset
         if music_asset.rights_status != RightsStatus.approved_for_stream:
-            raise ValueError(
-                f"Music asset {music_asset.id} rights_status={music_asset.rights_status}"
-            )
+            raise ValueError(f"Music asset {music_asset.id} rights_status={music_asset.rights_status}")
         music_path = await _download_asset(db, music_asset)
         mixed_path = settings.spool_prepared / f"{item.id}_mixed.mp4"
 
         job_mix = PrepJob(
-            plan_item_id=item.id, job_type=JobType.mix, status=JobStatus.running,
+            plan_item_id=item.id,
+            job_type=JobType.mix,
+            status=JobStatus.running,
             started_at=datetime.now(timezone.utc),
         )
         db.add(job_mix)
@@ -173,8 +198,11 @@ async def prepare_item(db: AsyncSession, item: StreamPlanItem) -> None:
 
         try:
             await mix_audio(
-                normalized_path, music_path, mixed_path,
-                float(item.video_audio_gain), float(item.music_audio_gain),
+                normalized_path,
+                music_path,
+                mixed_path,
+                float(item.video_audio_gain),
+                float(item.music_audio_gain),
             )
             job_mix.status = JobStatus.done
             job_mix.finished_at = datetime.now(timezone.utc)
@@ -208,6 +236,7 @@ async def _download_asset(db: AsyncSession, asset: LibraryAsset) -> Path:
         checksum, size = await _stream_http_to_file(asset.source_url, dest)
     elif asset.source_type.value == "uploaded_file" and asset.local_source_path:
         src = Path(asset.local_source_path)
+        _validate_local_path(src)  # Security check
         if not src.exists():
             raise FileNotFoundError(f"Local source not found: {src}")
         checksum, size = await _copy_file_streaming(src, dest)

@@ -8,25 +8,28 @@ logger = structlog.get_logger()
 
 DEMO_VIDEOS = [
     {
-        "title": "Big Buck Bunny",
-        "source_url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4",
+        "title": "Test Video 1 - Black Screen",
+        "source_type": SourceType.uploaded_file,
+        "local_source_path": "/spool/test_media/test1.mp4",
         "duration_sec": 10,
-        "tags": ["animation", "demo"],
-        "notes": "Blender Foundation — Creative Commons",
+        "tags": ["test", "local"],
+        "notes": "Generated locally: 10s black screen with 440Hz tone",
     },
     {
-        "title": "Sintel Trailer",
-        "source_url": "https://test-videos.co.uk/vids/sintel/mp4/h264/1080/Sintel_1080_10s_1MB.mp4",
+        "title": "Test Video 2 - Color Bars",
+        "source_type": SourceType.uploaded_file,
+        "local_source_path": "/spool/test_media/test2.mp4",
         "duration_sec": 10,
-        "tags": ["animation", "demo"],
-        "notes": "Blender Foundation — Creative Commons",
+        "tags": ["test", "local"],
+        "notes": "Generated locally: 10s color bars with 880Hz tone",
     },
     {
-        "title": "Jellyfish Test Clip",
-        "source_url": "https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_1MB.mp4",
+        "title": "Test Video 3 - Noise Pattern",
+        "source_type": SourceType.uploaded_file,
+        "local_source_path": "/spool/test_media/test3.mp4",
         "duration_sec": 10,
-        "tags": ["nature", "demo"],
-        "notes": "Test video — public domain",
+        "tags": ["test", "local"],
+        "notes": "Generated locally: 10s noise pattern with 220Hz tone",
     },
 ]
 
@@ -55,8 +58,8 @@ async def seed_demo_data(db: AsyncSession) -> dict:
         asset = LibraryAsset(
             kind=AssetKind.video,
             title=v["title"],
-            source_type=SourceType.direct_url,
-            source_url=v["source_url"],
+            source_type=v["source_type"],
+            local_source_path=v["local_source_path"],
             duration_sec=v["duration_sec"],
             tags=v["tags"],
             notes=v["notes"],

@@ -22,9 +22,7 @@ async def get_report(report_date: date, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{report_date}/generate", response_model=ReportOut)
-async def generate_report_endpoint(
-    report_date: date, db: AsyncSession = Depends(get_db)
-):
+async def generate_report_endpoint(report_date: date, db: AsyncSession = Depends(get_db)):
     from voulezvous.services.reporter import generate_daily_report
 
     report = await generate_daily_report(db, report_date)

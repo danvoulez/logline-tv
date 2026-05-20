@@ -17,11 +17,7 @@ async def list_runs(
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    rows = (
-        await db.execute(
-            select(DirectorRun).order_by(desc(DirectorRun.started_at)).limit(limit)
-        )
-    ).scalars().all()
+    rows = (await db.execute(select(DirectorRun).order_by(desc(DirectorRun.started_at)).limit(limit))).scalars().all()
     return [
         {
             "id": str(r.id),
@@ -40,12 +36,14 @@ async def get_run(run_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     if not run:
         raise HTTPException(404, "run not found")
     rows = (
-        await db.execute(
-            select(DirectorAction)
-            .where(DirectorAction.run_id == run_id)
-            .order_by(DirectorAction.sequence_index)
+        (
+            await db.execute(
+                select(DirectorAction).where(DirectorAction.run_id == run_id).order_by(DirectorAction.sequence_index)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {
         "id": str(run.id),
         "started_at": run.started_at.isoformat() if run.started_at else None,
@@ -78,10 +76,10 @@ async def list_actions(
     db: AsyncSession = Depends(get_db),
 ):
     rows = (
-        await db.execute(
-            select(DirectorAction).order_by(desc(DirectorAction.created_at)).limit(limit)
-        )
-    ).scalars().all()
+        (await db.execute(select(DirectorAction).order_by(desc(DirectorAction.created_at)).limit(limit)))
+        .scalars()
+        .all()
+    )
     return [
         {
             "id": str(a.id),

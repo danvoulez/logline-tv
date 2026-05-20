@@ -56,20 +56,21 @@ FALLBACK_RESERVE_COUNT = 3  # Reserve slots at end for fallback
 async def build_candidate_shelf(db: AsyncSession) -> list[CandidateAsset]:
     """Build the approved shelf — only assets eligible for lineup."""
     result = await db.execute(
-        select(CandidateAsset).where(
+        select(CandidateAsset)
+        .where(
             CandidateAsset.rights_status == CandidateRightsStatus.approved_for_stream,
-            CandidateAsset.discovery_status.in_([
-                DiscoveryStatus.accepted, DiscoveryStatus.inspected
-            ]),
-            CandidateAsset.retrieval_status.in_([
-                RetrievalStatus.authorized_direct,
-                RetrievalStatus.authorized_official,
-            ]),
+            CandidateAsset.discovery_status.in_([DiscoveryStatus.accepted, DiscoveryStatus.inspected]),
+            CandidateAsset.retrieval_status.in_(
+                [
+                    RetrievalStatus.authorized_direct,
+                    RetrievalStatus.authorized_official,
+                ]
+            ),
             CandidateAsset.duration_sec.isnot(None),
             CandidateAsset.duration_sec > 0,
-        ).options(
-            selectinload(CandidateAsset.enrichment)
-        ).order_by(CandidateAsset.created_at.desc())
+        )
+        .options(selectinload(CandidateAsset.enrichment))
+        .order_by(CandidateAsset.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -86,8 +87,9 @@ def _get_time_slot(hour: int) -> str:
         return "late_night"
 
 
-def _score_candidate_for_slot(candidate: CandidateAsset, enrichment: AssetEnrichment | None,
-                               hour: int, used_count: int) -> float:
+def _score_candidate_for_slot(
+    candidate: CandidateAsset, enrichment: AssetEnrichment | None, hour: int, used_count: int
+) -> float:
     """Score a candidate for a time slot. Higher = better fit."""
     score = 1.0
 
@@ -101,18 +103,18 @@ def _score_candidate_for_slot(candidate: CandidateAsset, enrichment: AssetEnrich
 
         # Penalize high repetition risk
         if enrichment.repetition_risk:
-            score *= (1.0 - float(enrichment.repetition_risk) * 0.5)
+            score *= 1.0 - float(enrichment.repetition_risk) * 0.5
 
     # Penalize repeat usage
     if used_count > 0:
-        score *= 0.3 ** used_count
+        score *= 0.3**used_count
 
     return score
 
 
-async def generate_lineup(db: AsyncSession, lineup_date: date,
-                           target_hours: int = 24,
-                           mix_music: bool = True) -> LineupRun:
+async def generate_lineup(
+    db: AsyncSession, lineup_date: date, target_hours: int = 24, mix_music: bool = True
+) -> LineupRun:
     """Generate a deterministic 24h lineup from approved shelf."""
     shelf = await build_candidate_shelf(db)
     if not shelf:
@@ -145,8 +147,7 @@ async def generate_lineup(db: AsyncSession, lineup_date: date,
     previous_asset_id: uuid.UUID | None = None
     overflow_repeats_used = False
 
-    start_time = datetime(lineup_date.year, lineup_date.month, lineup_date.day,
-                          0, 0, 0, tzinfo=timezone.utc)
+    start_time = datetime(lineup_date.year, lineup_date.month, lineup_date.day, 0, 0, 0, tzinfo=timezone.utc)
 
     while filled_sec < target_sec and shelf:
         current_hour = (filled_sec // 3600) % 24
@@ -161,7 +162,8 @@ async def generate_lineup(db: AsyncSession, lineup_date: date,
                     sequence_index=sequence,
                     candidate_asset_id=bumper.id,
                     target_start_at=start_time + timedelta(seconds=filled_sec),
-                    target_end_at=start_time + timedelta(seconds=filled_sec + (bumper.duration_sec or BUFFER_DURATION_SEC)),
+                    target_end_at=start_time
+                    + timedelta(seconds=filled_sec + (bumper.duration_sec or BUFFER_DURATION_SEC)),
                     slot_type=SlotType.buffer,
                     decision_reason="Periodic buffer insertion",
                 )
@@ -196,8 +198,7 @@ async def generate_lineup(db: AsyncSession, lineup_date: date,
             ]
             if not scored:
                 raise RuntimeError(
-                    "Lineup generation stalled: no candidates available even after "
-                    "repeat-overflow relaxation"
+                    "Lineup generation stalled: no candidates available even after repeat-overflow relaxation"
                 )
 
         scored.sort(key=lambda x: -x[0])
@@ -216,11 +217,7 @@ async def generate_lineup(db: AsyncSession, lineup_date: date,
                 hints = enrichment.music_pairing_hints
                 music_ref = hints[0] if isinstance(hints, list) and hints else None
 
-        repeat_mode = (
-            "repeat_overflow"
-            if usage_count.get(chosen.id, 0) >= MAX_REPEATS_PER_DAY
-            else "strict"
-        )
+        repeat_mode = "repeat_overflow" if usage_count.get(chosen.id, 0) >= MAX_REPEATS_PER_DAY else "strict"
         item = LineupItem(
             lineup_run_id=lineup.id,
             sequence_index=sequence,
@@ -272,8 +269,7 @@ async def generate_lineup(db: AsyncSession, lineup_date: date,
 
     await db.commit()
     await db.refresh(lineup)
-    logger.info("lineup_generated", id=str(lineup.id), items=sequence,
-                hours=round(filled_sec / 3600, 2))
+    logger.info("lineup_generated", id=str(lineup.id), items=sequence, hours=round(filled_sec / 3600, 2))
     return lineup
 
 
@@ -290,16 +286,19 @@ async def llm_polish_lineup(db: AsyncSession, lineup_id: uuid.UUID) -> dict:
 
     Falls back to deterministic quality checks if no LLM available.
     """
-    lineup = (await db.execute(
-        select(LineupRun).where(LineupRun.id == lineup_id)
-    )).scalar_one_or_none()
+    lineup = (await db.execute(select(LineupRun).where(LineupRun.id == lineup_id))).scalar_one_or_none()
     if not lineup:
         return {"error": "Lineup not found"}
 
-    items = (await db.execute(
-        select(LineupItem).where(LineupItem.lineup_run_id == lineup_id)
-        .order_by(LineupItem.sequence_index)
-    )).scalars().all()
+    items = (
+        (
+            await db.execute(
+                select(LineupItem).where(LineupItem.lineup_run_id == lineup_id).order_by(LineupItem.sequence_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     suggestions: list[dict] = []
 
@@ -310,21 +309,25 @@ async def llm_polish_lineup(db: AsyncSession, lineup_id: uuid.UUID) -> dict:
         if item.slot_type == SlotType.buffer:
             continue
         if item.candidate_asset_id == prev_asset_id:
-            suggestions.append({
-                "type": "flag_monotony",
-                "sequence_index": item.sequence_index,
-                "reason": "Consecutive duplicate asset",
-            })
+            suggestions.append(
+                {
+                    "type": "flag_monotony",
+                    "sequence_index": item.sequence_index,
+                    "reason": "Consecutive duplicate asset",
+                }
+            )
         prev_asset_id = item.candidate_asset_id
 
     # Check music pairing gaps
     music_count = sum(1 for i in items if i.music_asset_ref and i.slot_type == SlotType.main)
     main_count = sum(1 for i in items if i.slot_type == SlotType.main)
     if main_count > 0 and music_count / main_count < 0.5:
-        suggestions.append({
-            "type": "adjust_music_pairing",
-            "reason": f"Only {music_count}/{main_count} items have music pairing",
-        })
+        suggestions.append(
+            {
+                "type": "adjust_music_pairing",
+                "reason": f"Only {music_count}/{main_count} items have music pairing",
+            }
+        )
 
     # Try LLM polish
     llm_suggestions = await _try_llm_polish(items)
@@ -346,11 +349,12 @@ async def _try_llm_polish(items: list[LineupItem]) -> list[dict]:
         summary = f"Lineup has {len(items)} items. "
         slot_types = {}
         for i in items[:20]:
-            st = i.slot_type.value if hasattr(i.slot_type, 'value') else str(i.slot_type)
+            st = i.slot_type.value if hasattr(i.slot_type, "value") else str(i.slot_type)
             slot_types[st] = slot_types.get(st, 0) + 1
         summary += f"Slot distribution (first 20): {slot_types}"
 
         from voulezvous.config import settings as _settings
+
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"{_settings.local_llm_url}/api/generate",

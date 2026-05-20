@@ -26,27 +26,19 @@ router = APIRouter(prefix="/discovery", tags=["discovery"])
 
 @router.post("/run", response_model=DiscoveryRunOut, status_code=201)
 async def trigger_discovery(
-    simulated: bool = Query(
-        False, description="Use simulated discovery (no browser, for testing)"
-    ),
+    simulated: bool = Query(False, description="Use simulated discovery (no browser, for testing)"),
     db: AsyncSession = Depends(get_db),
 ):
     if simulated:
         run = await run_discovery_simulated(db, run_date=date.today())
     else:
-        try:
-            run = await run_discovery(db, run_date=date.today())
-        except Exception as e:
-            logger.warning("real_discovery_failed_falling_back", error=str(e))
-            run = await run_discovery_simulated(db, run_date=date.today())
+        run = await run_discovery(db, run_date=date.today())
     return run
 
 
 @router.get("/runs", response_model=list[DiscoveryRunOut])
 async def list_discovery_runs(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(DiscoveryRun).order_by(DiscoveryRun.created_at.desc()).limit(20)
-    )
+    result = await db.execute(select(DiscoveryRun).order_by(DiscoveryRun.created_at.desc()).limit(20))
     return result.scalars().all()
 
 
@@ -85,8 +77,7 @@ async def domain_login(
     if not policy.credential_email or not policy.credential_password:
         raise HTTPException(
             400,
-            f"Credentials missing for {req.domain}. "
-            "Set credential_email and credential_password via /admin.",
+            f"Credentials missing for {req.domain}. Set credential_email and credential_password via /admin.",
         )
 
     runtime = BrowserRuntime()

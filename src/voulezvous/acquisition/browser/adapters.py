@@ -22,15 +22,9 @@ class DBAdapter:
 
     DEFAULT_RESULT_SELECTOR = "a[href]"
     DEFAULT_TITLE_SELECTOR = "h1, h2, .title"
-    DEFAULT_LOGIN_EMAIL_SEL = (
-        "input[type='email'], input[name='email'], "
-        "input[name='username'], input[name='login']"
-    )
+    DEFAULT_LOGIN_EMAIL_SEL = "input[type='email'], input[name='email'], input[name='username'], input[name='login']"
     DEFAULT_LOGIN_PASS_SEL = "input[type='password']"
-    DEFAULT_LOGIN_SUBMIT_SEL = (
-        "button[type='submit'], input[type='submit'], "
-        "button.login-btn, button.submit"
-    )
+    DEFAULT_LOGIN_SUBMIT_SEL = "button[type='submit'], input[type='submit'], button.login-btn, button.submit"
 
     def __init__(self, policy: DomainPolicy) -> None:
         self.policy = policy
@@ -43,10 +37,7 @@ class DBAdapter:
 
     @property
     def session_profile_name(self) -> str:
-        return (
-            self.policy.session_profile_name
-            or f"{self.policy.domain.replace('.', '_')}_session"
-        )
+        return self.policy.session_profile_name or f"{self.policy.domain.replace('.', '_')}_session"
 
     # ── Selectors (with sensible fallbacks) ───────────────────────────────────
 
@@ -124,9 +115,7 @@ class DBAdapter:
             return [str(e).lower().lstrip(".") for e in raw]
         return ["mp4", "webm", "m3u8", "mpd"]
 
-    def classify_retrieval(
-        self, url: str | None, page_info: dict | None = None
-    ) -> tuple[bool, str | None]:
+    def classify_retrieval(self, url: str | None, page_info: dict | None = None) -> tuple[bool, str | None]:
         """Decide if a URL/page yields an authorized retrieval path."""
         info = page_info or {}
 
@@ -179,15 +168,11 @@ class DBAdapter:
             return None
 
 
-async def get_adapter_for_domain(
-    db: AsyncSession, domain: str
-) -> DBAdapter | None:
+async def get_adapter_for_domain(db: AsyncSession, domain: str) -> DBAdapter | None:
     """Load the adapter for a domain. Returns None if not registered."""
     if not domain:
         return None
-    result = await db.execute(
-        select(DomainPolicy).where(DomainPolicy.domain == domain)
-    )
+    result = await db.execute(select(DomainPolicy).where(DomainPolicy.domain == domain))
     policy = result.scalar_one_or_none()
     if policy is None:
         return None

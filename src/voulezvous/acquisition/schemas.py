@@ -19,6 +19,7 @@ from .enums import (
 
 # ---------- Domain Policy ----------
 
+
 class DomainPolicyCreate(BaseModel):
     domain: str
     is_enabled: bool = True
@@ -129,6 +130,7 @@ class DomainPolicyOut(BaseModel):
 
 # ---------- Search Keyword ----------
 
+
 class KeywordCreate(BaseModel):
     keyword: str
     category: str | None = None
@@ -162,6 +164,7 @@ class KeywordOut(BaseModel):
 
 # ---------- Discovery Run ----------
 
+
 class DiscoveryRunOut(BaseModel):
     id: uuid.UUID
     run_date: date
@@ -175,6 +178,7 @@ class DiscoveryRunOut(BaseModel):
 
 
 # ---------- Candidate Asset ----------
+
 
 class CandidateUpdate(BaseModel):
     rights_status: CandidateRightsStatus | None = None
@@ -204,6 +208,7 @@ class CandidateOut(BaseModel):
 
 
 # ---------- Lineup ----------
+
 
 class LineupItemOut(BaseModel):
     id: uuid.UUID
@@ -238,6 +243,7 @@ class LineupGenerateRequest(BaseModel):
 
 # ---------- Media IR ----------
 
+
 class MediaIRJobOut(BaseModel):
     id: uuid.UUID
     lineup_item_id: uuid.UUID
@@ -252,6 +258,7 @@ class MediaIRJobOut(BaseModel):
 
 
 # ---------- Autonomy Report ----------
+
 
 class AutonomyReportOut(BaseModel):
     id: uuid.UUID

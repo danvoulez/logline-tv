@@ -34,7 +34,7 @@ def loads_llm_json(text: str, default: Any = None) -> Any:
 
 
 def _extract_first_json_value(text: str) -> str | None:
-    starts = [i for i, ch in enumerate(text) if ch in "[{" ]
+    starts = [i for i, ch in enumerate(text) if ch in "[{"]
     for start in starts:
         opening = text[start]
         closing = "]" if opening == "[" else "}"
@@ -58,5 +58,5 @@ def _extract_first_json_value(text: str) -> str | None:
             elif ch == closing:
                 depth -= 1
                 if depth == 0:
-                    return text[start:idx + 1]
+                    return text[start : idx + 1]
     return None

@@ -31,6 +31,7 @@ class ToolVerb(str, Enum):
 
 # ---------- Discovery Tools ----------
 
+
 class SearchSiteRequest(BaseModel):
     domain: str
     query: str
@@ -116,6 +117,7 @@ class RejectCandidateResponse(BaseModel):
 
 # ---------- Enrichment Tools ----------
 
+
 class ExpandKeywordsRequest(BaseModel):
     base_keywords: list[str]
     category: str | None = None
@@ -147,6 +149,7 @@ class EnrichCandidateResponse(BaseModel):
 
 
 # ---------- Curation Tools ----------
+
 
 class BuildCandidateShelfRequest(BaseModel):
     min_duration_sec: int = 60
@@ -225,6 +228,7 @@ class WriteReportResponse(BaseModel):
 
 
 # ---------- Audit ----------
+
 
 class ToolAuditEntry(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)

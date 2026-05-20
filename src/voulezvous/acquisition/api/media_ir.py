@@ -32,7 +32,5 @@ async def list_ir_jobs(
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(MediaIRJob).order_by(MediaIRJob.created_at.desc()).limit(limit)
-    )
+    result = await db.execute(select(MediaIRJob).order_by(MediaIRJob.created_at.desc()).limit(limit))
     return result.scalars().all()

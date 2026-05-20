@@ -30,7 +30,7 @@ from voulezvous.acquisition.models import (
     SearchKeyword,
 )
 from voulezvous.acquisition.workers.curator import generate_lineup, llm_polish_lineup
-from voulezvous.acquisition.workers.discovery import run_discovery_simulated
+from voulezvous.acquisition.workers.discovery import run_discovery, run_discovery_simulated
 from voulezvous.acquisition.workers.enrichment import run_enrichment
 from voulezvous.acquisition.workers.media_ir import compile_media_ir
 from voulezvous.acquisition.workers.reporter import generate_report
@@ -39,7 +39,8 @@ logger = structlog.get_logger()
 
 
 async def _adjust_keyword_priorities(
-    db: AsyncSession, yesterday_report: AutonomyReport | None,
+    db: AsyncSession,
+    yesterday_report: AutonomyReport | None,
 ) -> dict:
     """Adjust keyword weights based on yesterday's report signals."""
     adjustments = []
@@ -54,12 +55,14 @@ async def _adjust_keyword_priorities(
         found = kw_stat.get("candidates_found", 0)
         accepted = kw_stat.get("accepted", 0)
 
-        kw = (await db.execute(
-            select(SearchKeyword).where(
-                SearchKeyword.keyword == keyword_text,
-                SearchKeyword.active.is_(True),
+        kw = (
+            await db.execute(
+                select(SearchKeyword).where(
+                    SearchKeyword.keyword == keyword_text,
+                    SearchKeyword.active.is_(True),
+                )
             )
-        )).scalar_one_or_none()
+        ).scalar_one_or_none()
         if not kw:
             continue
 
@@ -68,21 +71,25 @@ async def _adjust_keyword_priorities(
         # Boost keywords that find accepted content
         if accepted > 0:
             kw.weight = min(old_weight * 1.2, 5.0)
-            adjustments.append({
-                "keyword": keyword_text,
-                "old_weight": old_weight,
-                "new_weight": float(kw.weight),
-                "reason": f"Found {accepted} accepted",
-            })
+            adjustments.append(
+                {
+                    "keyword": keyword_text,
+                    "old_weight": old_weight,
+                    "new_weight": float(kw.weight),
+                    "reason": f"Found {accepted} accepted",
+                }
+            )
         # Reduce keywords that find nothing
         elif found == 0:
             kw.weight = max(old_weight * 0.7, 0.1)
-            adjustments.append({
-                "keyword": keyword_text,
-                "old_weight": old_weight,
-                "new_weight": float(kw.weight),
-                "reason": "Found nothing",
-            })
+            adjustments.append(
+                {
+                    "keyword": keyword_text,
+                    "old_weight": old_weight,
+                    "new_weight": float(kw.weight),
+                    "reason": "Found nothing",
+                }
+            )
 
     await db.commit()
     return {"adjustments": adjustments}
@@ -94,17 +101,25 @@ async def _auto_approve_candidates(db: AsyncSession) -> int:
     This simulates the operator approval step for demo/automated runs.
     In production, candidates would need explicit operator approval.
     """
-    candidates = (await db.execute(
-        select(CandidateAsset).where(
-            CandidateAsset.rights_status == CandidateRightsStatus.pending_review,
-            CandidateAsset.retrieval_status.in_([
-                RetrievalStatus.authorized_direct,
-                RetrievalStatus.authorized_official,
-            ]),
-            CandidateAsset.duration_sec.isnot(None),
-            CandidateAsset.duration_sec > 60,
+    candidates = (
+        (
+            await db.execute(
+                select(CandidateAsset).where(
+                    CandidateAsset.rights_status == CandidateRightsStatus.pending_review,
+                    CandidateAsset.retrieval_status.in_(
+                        [
+                            RetrievalStatus.authorized_direct,
+                            RetrievalStatus.authorized_official,
+                        ]
+                    ),
+                    CandidateAsset.duration_sec.isnot(None),
+                    CandidateAsset.duration_sec > 60,
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for c in candidates:
         c.rights_status = CandidateRightsStatus.approved_for_stream
@@ -115,8 +130,17 @@ async def _auto_approve_candidates(db: AsyncSession) -> int:
     return len(candidates)
 
 
-async def run_daily_orchestration(db: AsyncSession, target_date: date | None = None) -> dict:
-    """Run the full autonomous daily cycle."""
+async def run_daily_orchestration(
+    db: AsyncSession, target_date: date | None = None, simulated_discovery: bool = True
+) -> dict:
+    """Run the full autonomous daily cycle.
+
+    Args:
+        db: Database session
+        target_date: Date to run orchestration for (defaults to today)
+        simulated_discovery: If True, use simulated discovery (no browser).
+                           If False, use real browser discovery and fail if it fails.
+    """
     target_date = target_date or date.today()
     yesterday = target_date - timedelta(days=1)
 
@@ -124,39 +148,43 @@ async def run_daily_orchestration(db: AsyncSession, target_date: date | None = N
     errors = []
 
     # Step 1: Read yesterday's report
-    yesterday_report = (await db.execute(
-        select(AutonomyReport).where(AutonomyReport.report_date == yesterday)
-    )).scalar_one_or_none()
+    yesterday_report = (
+        await db.execute(select(AutonomyReport).where(AutonomyReport.report_date == yesterday))
+    ).scalar_one_or_none()
     steps_completed.append("read_yesterday_report")
-    logger.info("orchestrator_step", step="read_yesterday_report",
-                has_report=yesterday_report is not None)
+    logger.info("orchestrator_step", step="read_yesterday_report", has_report=yesterday_report is not None)
 
     # Step 2: Adjust keyword priorities
     try:
         adjustments = await _adjust_keyword_priorities(db, yesterday_report)
         steps_completed.append("adjust_keywords")
-        logger.info("orchestrator_step", step="adjust_keywords",
-                    adjustments=len(adjustments.get("adjustments", [])))
+        logger.info("orchestrator_step", step="adjust_keywords", adjustments=len(adjustments.get("adjustments", [])))
     except Exception as e:
         errors.append({"step": "adjust_keywords", "error": str(e)})
         logger.error("orchestrator_step_failed", step="adjust_keywords", error=str(e))
 
-    # Step 3: Run discovery (simulated — use run_discovery for real browser runs)
+    # Step 3: Run discovery
     try:
-        discovery_run = await run_discovery_simulated(db, run_date=target_date)
+        if simulated_discovery:
+            discovery_run = await run_discovery_simulated(db, run_date=target_date)
+            logger.info("orchestrator_step", step="discovery", mode="simulated")
+        else:
+            discovery_run = await run_discovery(db, run_date=target_date)
+            logger.info("orchestrator_step", step="discovery", mode="real")
         steps_completed.append("discovery")
-        logger.info("orchestrator_step", step="discovery",
-                    found=discovery_run.output_summary.get("total_found", 0))
+        logger.info("orchestrator_step", step="discovery", found=discovery_run.output_summary.get("total_found", 0))
     except Exception as e:
         errors.append({"step": "discovery", "error": str(e)})
         logger.error("orchestrator_step_failed", step="discovery", error=str(e))
+        if not simulated_discovery:
+            # In real mode, discovery failure is critical
+            raise
 
     # Step 4: Enrich candidates
     try:
         enrichment_result = await run_enrichment(db)
         steps_completed.append("enrichment")
-        logger.info("orchestrator_step", step="enrichment",
-                    enriched=enrichment_result.get("enriched", 0))
+        logger.info("orchestrator_step", step="enrichment", enriched=enrichment_result.get("enriched", 0))
     except Exception as e:
         errors.append({"step": "enrichment", "error": str(e)})
         logger.error("orchestrator_step_failed", step="enrichment", error=str(e))
@@ -175,8 +203,7 @@ async def run_daily_orchestration(db: AsyncSession, target_date: date | None = N
     try:
         lineup = await generate_lineup(db, lineup_date=target_date)
         steps_completed.append("lineup_generation")
-        logger.info("orchestrator_step", step="lineup_generation",
-                    items=lineup.context_summary.get("total_items", 0))
+        logger.info("orchestrator_step", step="lineup_generation", items=lineup.context_summary.get("total_items", 0))
     except ValueError as e:
         errors.append({"step": "lineup_generation", "error": str(e)})
         logger.warning("orchestrator_step_skipped", step="lineup_generation", reason=str(e))
@@ -197,8 +224,7 @@ async def run_daily_orchestration(db: AsyncSession, target_date: date | None = N
         try:
             ir_result = await compile_media_ir(db, lineup.id)
             steps_completed.append("media_ir_compile")
-            logger.info("orchestrator_step", step="media_ir_compile",
-                        compiled=ir_result.get("compiled", 0))
+            logger.info("orchestrator_step", step="media_ir_compile", compiled=ir_result.get("compiled", 0))
         except Exception as e:
             errors.append({"step": "media_ir_compile", "error": str(e)})
             logger.error("orchestrator_step_failed", step="media_ir_compile", error=str(e))

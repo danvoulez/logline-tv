@@ -17,3 +17,7 @@ spool/reports/
 # Playwright MCP runtime logs
 .playwright-mcp/
 
+# macOS
+.DS_Store
+**/.DS_Store
+

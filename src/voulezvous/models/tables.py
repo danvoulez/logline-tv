@@ -38,13 +38,9 @@ class LibraryAsset(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "library_assets"
     __table_args__ = (UniqueConstraint("source_url", name="uq_library_assets_source_url"),)
 
-    kind: Mapped[AssetKind] = mapped_column(
-        Enum(AssetKind, native_enum=False), nullable=False
-    )
+    kind: Mapped[AssetKind] = mapped_column(Enum(AssetKind, native_enum=False), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    source_type: Mapped[SourceType] = mapped_column(
-        Enum(SourceType, native_enum=False), nullable=False
-    )
+    source_type: Mapped[SourceType] = mapped_column(Enum(SourceType, native_enum=False), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     local_source_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     source_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -64,12 +60,8 @@ class LibraryAsset(Base, UUIDPrimaryKey, TimestampMixin):
         nullable=False,
     )
 
-    last_downloaded_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_streamed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_downloaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_streamed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     times_streamed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -111,9 +103,7 @@ class StreamPlan(Base, UUIDPrimaryKey, TimestampMixin):
 class StreamPlanItem(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "stream_plan_items"
 
-    stream_plan_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("stream_plans.id"), nullable=False
-    )
+    stream_plan_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("stream_plans.id"), nullable=False)
     sequence_index: Mapped[int] = mapped_column(Integer, nullable=False)
     video_asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("library_assets.id"), nullable=False
@@ -122,21 +112,13 @@ class StreamPlanItem(Base, UUIDPrimaryKey, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("library_assets.id"), nullable=True
     )
 
-    planned_start_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    planned_end_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    planned_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    planned_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     target_duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     mix_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    video_audio_gain: Mapped[Decimal] = mapped_column(
-        Numeric(3, 2), default=Decimal("0.50"), nullable=False
-    )
-    music_audio_gain: Mapped[Decimal] = mapped_column(
-        Numeric(3, 2), default=Decimal("0.50"), nullable=False
-    )
+    video_audio_gain: Mapped[Decimal] = mapped_column(Numeric(3, 2), default=Decimal("0.50"), nullable=False)
+    music_audio_gain: Mapped[Decimal] = mapped_column(Numeric(3, 2), default=Decimal("0.50"), nullable=False)
     delete_after_stream: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     prep_status: Mapped[PrepStatus] = mapped_column(
@@ -153,19 +135,13 @@ class StreamPlanItem(Base, UUIDPrimaryKey, TimestampMixin):
     prepared_file_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     prepared_file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    actual_start_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    actual_end_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    actual_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    actual_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_log: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     plan: Mapped["StreamPlan"] = relationship(back_populates="items")
     video_asset: Mapped["LibraryAsset"] = relationship(foreign_keys=[video_asset_id])
-    music_asset: Mapped["LibraryAsset | None"] = relationship(
-        foreign_keys=[music_asset_id]
-    )
+    music_asset: Mapped["LibraryAsset | None"] = relationship(foreign_keys=[music_asset_id])
 
 
 class PrepJob(Base, UUIDPrimaryKey, TimestampMixin):
@@ -174,25 +150,17 @@ class PrepJob(Base, UUIDPrimaryKey, TimestampMixin):
     plan_item_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stream_plan_items.id"), nullable=False
     )
-    job_type: Mapped[JobType] = mapped_column(
-        Enum(JobType, native_enum=False), nullable=False
-    )
+    job_type: Mapped[JobType] = mapped_column(Enum(JobType, native_enum=False), nullable=False)
     status: Mapped[JobStatus] = mapped_column(
         Enum(JobStatus, native_enum=False),
         default=JobStatus.pending,
         nullable=False,
     )
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_: Mapped[dict] = mapped_column(
-        "metadata", JSONB, server_default="{}", nullable=False
-    )
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, server_default="{}", nullable=False)
 
     plan_item: Mapped["StreamPlanItem"] = relationship()
 
@@ -200,21 +168,15 @@ class PrepJob(Base, UUIDPrimaryKey, TimestampMixin):
 class StreamEvent(Base, UUIDPrimaryKey):
     __tablename__ = "stream_events"
 
-    event_type: Mapped[EventType] = mapped_column(
-        Enum(EventType, native_enum=False), nullable=False
-    )
-    plan_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("stream_plans.id"), nullable=True
-    )
+    event_type: Mapped[EventType] = mapped_column(Enum(EventType, native_enum=False), nullable=False)
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("stream_plans.id"), nullable=True)
     plan_item_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stream_plan_items.id"), nullable=True
     )
     asset_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("library_assets.id"), nullable=True
     )
-    occurred_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
 
 
@@ -227,23 +189,17 @@ class StreamControl(Base, TimestampMixin):
     current_item_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stream_plan_items.id"), nullable=True
     )
-    heartbeat_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class DailyReport(Base, UUIDPrimaryKey):
     __tablename__ = "daily_reports"
 
     report_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[ReportStatus] = mapped_column(
-        Enum(ReportStatus, native_enum=False), nullable=False
-    )
+    status: Mapped[ReportStatus] = mapped_column(Enum(ReportStatus, native_enum=False), nullable=False)
     summary: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
     markdown_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (UniqueConstraint("report_date", name="uq_daily_reports_date"),)
 
@@ -251,12 +207,8 @@ class DailyReport(Base, UUIDPrimaryKey):
 class DirectorRun(Base, UUIDPrimaryKey):
     __tablename__ = "director_runs"
 
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     state_snapshot: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
     llm_response: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
     action_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -278,9 +230,5 @@ class DirectorAction(Base, UUIDPrimaryKey):
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    executed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

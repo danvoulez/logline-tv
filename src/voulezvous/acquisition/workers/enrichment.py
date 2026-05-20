@@ -54,8 +54,7 @@ def _match_keywords(text: str, keyword_map: dict[str, list[str]]) -> list[str]:
     return matched or ["general"]
 
 
-def enrich_deterministic(title: str, tags: list, duration_sec: int | None,
-                         metadata: dict) -> dict:
+def enrich_deterministic(title: str, tags: list, duration_sec: int | None, metadata: dict) -> dict:
     """Deterministic enrichment — no LLM needed."""
     text = f"{title} {' '.join(str(t) for t in tags)} {metadata.get('description', '')}"
 
@@ -94,8 +93,7 @@ def enrich_deterministic(title: str, tags: list, duration_sec: int | None,
     }
 
 
-async def try_enrich_with_llm(title: str, tags: list, duration_sec: int | None,
-                               metadata: dict) -> dict | None:
+async def try_enrich_with_llm(title: str, tags: list, duration_sec: int | None, metadata: dict) -> dict | None:
     """Attempt LLM-based enrichment using local inference. Returns None if unavailable."""
     try:
         import httpx
@@ -144,12 +142,8 @@ async def run_enrichment(db: AsyncSession) -> dict:
     # Find candidates needing enrichment
     result = await db.execute(
         select(CandidateAsset).where(
-            CandidateAsset.discovery_status.in_([
-                DiscoveryStatus.accepted, DiscoveryStatus.inspected
-            ]),
-            ~CandidateAsset.id.in_(
-                select(AssetEnrichment.candidate_asset_id)
-            ),
+            CandidateAsset.discovery_status.in_([DiscoveryStatus.accepted, DiscoveryStatus.inspected]),
+            ~CandidateAsset.id.in_(select(AssetEnrichment.candidate_asset_id)),
         )
     )
     candidates = result.scalars().all()
@@ -162,17 +156,13 @@ async def run_enrichment(db: AsyncSession) -> dict:
         tags = candidate.tags if isinstance(candidate.tags, list) else []
 
         # Try LLM first, fall back to deterministic
-        llm_result = await try_enrich_with_llm(
-            candidate.title, tags, candidate.duration_sec, candidate.extra_metadata
-        )
+        llm_result = await try_enrich_with_llm(candidate.title, tags, candidate.duration_sec, candidate.extra_metadata)
 
         if llm_result:
             data = llm_result
             llm_count += 1
         else:
-            data = enrich_deterministic(
-                candidate.title, tags, candidate.duration_sec, candidate.extra_metadata
-            )
+            data = enrich_deterministic(candidate.title, tags, candidate.duration_sec, candidate.extra_metadata)
             heuristic_count += 1
 
         enrichment = AssetEnrichment(
@@ -198,8 +188,7 @@ async def run_enrichment(db: AsyncSession) -> dict:
         enriched_count += 1
 
     await db.commit()
-    logger.info("enrichment_complete", total=enriched_count, llm=llm_count,
-                heuristic=heuristic_count)
+    logger.info("enrichment_complete", total=enriched_count, llm=llm_count, heuristic=heuristic_count)
     return {
         "enriched": enriched_count,
         "llm_enriched": llm_count,

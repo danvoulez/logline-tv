@@ -16,6 +16,7 @@ from voulezvous.models.enums import (
 
 # --- Assets ---
 
+
 class AssetCreate(BaseModel):
     kind: AssetKind
     title: str
@@ -73,6 +74,7 @@ class AssetOut(BaseModel):
 
 # --- Plans ---
 
+
 class PlanGenerateRequest(BaseModel):
     plan_date: date
     hours: int = 24
@@ -119,6 +121,7 @@ class PlanOut(BaseModel):
 
 # --- Reports ---
 
+
 class ReportOut(BaseModel):
     id: uuid.UUID
     report_date: date
@@ -131,6 +134,7 @@ class ReportOut(BaseModel):
 
 
 # --- Events ---
+
 
 class EventOut(BaseModel):
     id: uuid.UUID
@@ -145,6 +149,7 @@ class EventOut(BaseModel):
 
 
 # --- Health ---
+
 
 class HealthOut(BaseModel):
     status: str = "ok"

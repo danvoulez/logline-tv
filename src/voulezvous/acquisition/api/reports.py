@@ -16,9 +16,9 @@ router = APIRouter(prefix="/reports", tags=["acq-reports"])
 
 @router.get("/{report_date}", response_model=AutonomyReportOut)
 async def get_report(report_date: date, db: AsyncSession = Depends(get_db)):
-    report = (await db.execute(
-        select(AutonomyReport).where(AutonomyReport.report_date == report_date)
-    )).scalar_one_or_none()
+    report = (
+        await db.execute(select(AutonomyReport).where(AutonomyReport.report_date == report_date))
+    ).scalar_one_or_none()
     if not report:
         raise HTTPException(404, f"No report for {report_date}")
     return report

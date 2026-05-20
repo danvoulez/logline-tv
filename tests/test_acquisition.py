@@ -49,6 +49,7 @@ def _policy(**kwargs):
 
 # ---- Test 1: DBAdapter builds URLs from templates ----
 
+
 def test_db_adapter_builds_search_url():
     p = _policy(
         domain="archive.org",
@@ -66,13 +67,12 @@ def test_db_adapter_returns_none_without_template():
 
 # ---- Test 2: Retrieval authorization gate ----
 
+
 def test_retrieval_authorization_gate():
     """Only URLs matching accepted_extensions classify as authorized."""
     adapter = DBAdapter(_policy(accepted_extensions=["mp4", "webm"]))
 
-    ok, rtype = adapter.classify_retrieval(
-        "https://archive.org/download/test/video.mp4", {}
-    )
+    ok, rtype = adapter.classify_retrieval("https://archive.org/download/test/video.mp4", {})
     assert ok is True
     assert rtype == "direct_url"
 
@@ -86,14 +86,13 @@ def test_retrieval_authorization_gate():
 def test_retrieval_via_media_interception():
     """needs_media_interception accepts intercepted media as authorized."""
     adapter = DBAdapter(_policy(needs_media_interception=True))
-    ok, rtype = adapter.classify_retrieval(
-        "https://tube.example/v/abc", {"intercepted_media": True}
-    )
+    ok, rtype = adapter.classify_retrieval("https://tube.example/v/abc", {"intercepted_media": True})
     assert ok is True
     assert rtype == "official_download"
 
 
 # ---- Test 3: Discovery persistence ----
+
 
 def test_discovery_run_model():
     """DiscoveryRun can be created with correct fields."""
@@ -109,25 +108,23 @@ def test_discovery_run_model():
 
 # ---- Test 4: metadata_only behavior ----
 
+
 def test_metadata_only_when_no_authorized_retrieval():
     """A domain with requires_login but no download button stays metadata-only."""
     adapter = DBAdapter(_policy(requires_login=True, accepted_extensions=[]))
 
-    ok, rtype = adapter.classify_retrieval(
-        "https://player.example/video/12345", {}
-    )
+    ok, rtype = adapter.classify_retrieval("https://player.example/video/12345", {})
     assert ok is False
     assert rtype is None
 
     # With download button visible after login — authorized
-    ok2, rtype2 = adapter.classify_retrieval(
-        "https://example.com/12345/download", {"has_download_button": True}
-    )
+    ok2, rtype2 = adapter.classify_retrieval("https://example.com/12345/download", {"has_download_button": True})
     assert ok2 is True
     assert rtype2 == "official_download"
 
 
 # ---- Test 5: Enrichment persistence ----
+
 
 def test_deterministic_enrichment():
     """Deterministic enrichment returns valid scores and tags."""
@@ -149,6 +146,7 @@ def test_deterministic_enrichment():
 
 # ---- Test 6: Deterministic lineup generation ----
 
+
 def test_lineup_slot_types():
     """SlotType enum covers all required types."""
     assert SlotType.main.value == "main"
@@ -167,6 +165,7 @@ def test_lineup_status_transitions():
 
 # ---- Test 7: Bounded LLM action validation ----
 
+
 def test_bounded_tool_validation_valid():
     """Valid tool verbs pass validation."""
     ok, err = validate_tool_call("search_site", {"domain": "archive.org", "query": "test"})
@@ -184,17 +183,29 @@ def test_bounded_tool_validation_invalid():
 def test_all_tool_verbs_registered():
     """All required tool verbs exist in ToolVerb enum."""
     required = [
-        "search_site", "open_result", "inspect_candidate", "verify_playback",
-        "extract_metadata", "register_retrieval_adapter", "reject_candidate",
-        "expand_keywords", "enrich_candidate", "build_candidate_shelf",
-        "rerank_candidates", "schedule_slot", "insert_buffer",
-        "choose_music_pairing", "emit_media_ir", "write_report",
+        "search_site",
+        "open_result",
+        "inspect_candidate",
+        "verify_playback",
+        "extract_metadata",
+        "register_retrieval_adapter",
+        "reject_candidate",
+        "expand_keywords",
+        "enrich_candidate",
+        "build_candidate_shelf",
+        "rerank_candidates",
+        "schedule_slot",
+        "insert_buffer",
+        "choose_music_pairing",
+        "emit_media_ir",
+        "write_report",
     ]
     for verb in required:
         assert ToolVerb(verb), f"Missing verb: {verb}"
 
 
 # ---- Test 8: Media IR compilation ----
+
 
 def test_media_ir_build():
     """Media IR produces valid ops list, never raw ffmpeg strings."""
@@ -256,6 +267,7 @@ def test_media_ir_trim_when_slot_shorter_than_content():
 
 
 # ---- Test 9: Orchestrator restart safety ----
+
 
 def test_orchestrator_idempotent_discovery_model():
     """Discovery run model supports restart-safe patterns."""

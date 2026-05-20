@@ -51,8 +51,9 @@ def validate_tool_call(verb: str, params: dict) -> tuple[bool, str]:
     return True, ""
 
 
-def record_audit(verb: ToolVerb, request_data: dict, response_data: dict,
-                 success: bool = True, error: str | None = None) -> None:
+def record_audit(
+    verb: ToolVerb, request_data: dict, response_data: dict, success: bool = True, error: str | None = None
+) -> None:
     """Record a tool execution in the audit log."""
     entry = ToolAuditEntry(
         verb=verb,
@@ -63,7 +64,7 @@ def record_audit(verb: ToolVerb, request_data: dict, response_data: dict,
     )
     _audit_log.append(entry)
     if len(_audit_log) > _AUDIT_LOG_MAX:
-        del _audit_log[:_AUDIT_LOG_MAX // 2]
+        del _audit_log[: _AUDIT_LOG_MAX // 2]
     logger.info("tool_audit", verb=verb.value, success=success, error=error)
 
 

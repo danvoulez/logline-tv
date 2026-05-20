@@ -34,13 +34,21 @@ cd tv-today
 cp .env.example .env
 ```
 
-### 2. Start everything
+### 2. Start core streaming stack
 
 ```bash
 docker compose up -d --build
 ```
 
 This starts: Postgres, runs migrations, API server, prep-worker, and streamer.
+
+### 2.1. Start autonomous Director (optional)
+
+```bash
+docker compose --profile director up -d director
+```
+
+This starts the LLM-bounded autonomous Director for plan generation and curation.
 
 ### 3. Seed demo data
 

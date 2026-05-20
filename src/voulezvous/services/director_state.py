@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from voulezvous.acquisition.enums import (
     CandidateRightsStatus,
-    DiscoveryStatus,
     RetrievalStatus,
 )
 from voulezvous.acquisition.models import (
@@ -84,24 +83,16 @@ async def compact_state(db: AsyncSession) -> dict:
     # ── Library ───────────────────────────────────────────────────────────────
     videos_approved = (
         await db.execute(
-            select(func.count(LibraryAsset.id)).where(
-                LibraryAsset.rights_status == RightsStatus.approved_for_stream
-            )
+            select(func.count(LibraryAsset.id)).where(LibraryAsset.rights_status == RightsStatus.approved_for_stream)
         )
     ).scalar_one()
     videos_pending = (
         await db.execute(
-            select(func.count(LibraryAsset.id)).where(
-                LibraryAsset.rights_status == RightsStatus.pending_review
-            )
+            select(func.count(LibraryAsset.id)).where(LibraryAsset.rights_status == RightsStatus.pending_review)
         )
     ).scalar_one()
     videos_blocked = (
-        await db.execute(
-            select(func.count(LibraryAsset.id)).where(
-                LibraryAsset.rights_status == RightsStatus.blocked
-            )
-        )
+        await db.execute(select(func.count(LibraryAsset.id)).where(LibraryAsset.rights_status == RightsStatus.blocked))
     ).scalar_one()
     avg_health = (
         await db.execute(
@@ -120,15 +111,19 @@ async def compact_state(db: AsyncSession) -> dict:
 
     # ── Worst-performing approved assets (candidates to block) ────────────────
     worst_rows = (
-        await db.execute(
-            select(LibraryAsset)
-            .where(LibraryAsset.rights_status == RightsStatus.approved_for_stream)
-            .where(LibraryAsset.times_streamed >= 5)
-            .where(LibraryAsset.health_score < 0.4)
-            .order_by(LibraryAsset.health_score)
-            .limit(5)
+        (
+            await db.execute(
+                select(LibraryAsset)
+                .where(LibraryAsset.rights_status == RightsStatus.approved_for_stream)
+                .where(LibraryAsset.times_streamed >= 5)
+                .where(LibraryAsset.health_score < 0.4)
+                .order_by(LibraryAsset.health_score)
+                .limit(5)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     worst_assets = [
         {
             "id": str(a.id),
@@ -156,8 +151,9 @@ async def compact_state(db: AsyncSession) -> dict:
     ).scalar_one()
     cand_pending = (
         await db.execute(
-            select(func.count(CandidateAsset.id))
-            .where(CandidateAsset.rights_status == CandidateRightsStatus.pending_review)
+            select(func.count(CandidateAsset.id)).where(
+                CandidateAsset.rights_status == CandidateRightsStatus.pending_review
+            )
         )
     ).scalar_one()
 
@@ -185,17 +181,12 @@ async def compact_state(db: AsyncSession) -> dict:
 
     # ── Discovery ─────────────────────────────────────────────────────────────
     last_run = (
-        await db.execute(
-            select(DiscoveryRun).order_by(desc(DiscoveryRun.created_at)).limit(1)
-        )
+        await db.execute(select(DiscoveryRun).order_by(desc(DiscoveryRun.created_at)).limit(1))
     ).scalar_one_or_none()
     discovery_block = {
         "last_run_at": last_run.created_at.isoformat() if last_run else None,
         "last_run_found": (last_run.output_summary or {}).get("total_found", 0) if last_run else 0,
-        "hours_since_last_run": (
-            round((now - last_run.created_at).total_seconds() / 3600, 1)
-            if last_run else None
-        ),
+        "hours_since_last_run": (round((now - last_run.created_at).total_seconds() / 3600, 1) if last_run else None),
     }
 
     # ── Sites (domains) ───────────────────────────────────────────────────────
@@ -213,9 +204,7 @@ async def compact_state(db: AsyncSession) -> dict:
     ]
 
     # ── Keywords ──────────────────────────────────────────────────────────────
-    kw_rows = (
-        await db.execute(select(SearchKeyword).order_by(desc(SearchKeyword.weight)).limit(20))
-    ).scalars().all()
+    kw_rows = (await db.execute(select(SearchKeyword).order_by(desc(SearchKeyword.weight)).limit(20))).scalars().all()
     keywords = [
         {
             "id": str(k.id),
@@ -230,10 +219,8 @@ async def compact_state(db: AsyncSession) -> dict:
 
     # ── Recent director actions ───────────────────────────────────────────────
     recent_rows = (
-        await db.execute(
-            select(DirectorAction).order_by(desc(DirectorAction.created_at)).limit(10)
-        )
-    ).scalars().all()
+        (await db.execute(select(DirectorAction).order_by(desc(DirectorAction.created_at)).limit(10))).scalars().all()
+    )
     last_actions = [
         {
             "at": a.created_at.isoformat(),
@@ -247,6 +234,7 @@ async def compact_state(db: AsyncSession) -> dict:
     # ── Disk ──────────────────────────────────────────────────────────────────
     try:
         from voulezvous.services.cleanup import disk_usage_spool
+
         disk = disk_usage_spool()
     except Exception:
         disk = None

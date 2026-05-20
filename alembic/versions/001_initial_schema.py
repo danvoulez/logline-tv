@@ -4,11 +4,13 @@ Revision ID: 001
 Revises:
 Create Date: 2025-01-01 00:00:00.000000
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision: str = "001"
 down_revision: Union[str, None] = None
@@ -77,9 +79,7 @@ def upgrade() -> None:
     op.create_table(
         "stream_plan_items",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column(
-            "stream_plan_id", UUID(as_uuid=True), sa.ForeignKey("stream_plans.id"), nullable=False
-        ),
+        sa.Column("stream_plan_id", UUID(as_uuid=True), sa.ForeignKey("stream_plans.id"), nullable=False),
         sa.Column("sequence_index", sa.Integer, nullable=False),
         sa.Column(
             "video_asset_id",
@@ -97,12 +97,8 @@ def upgrade() -> None:
         sa.Column("planned_end_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("target_duration_sec", sa.Integer, nullable=True),
         sa.Column("mix_enabled", sa.Boolean, nullable=False, server_default="false"),
-        sa.Column(
-            "video_audio_gain", sa.Numeric(3, 2), nullable=False, server_default="0.50"
-        ),
-        sa.Column(
-            "music_audio_gain", sa.Numeric(3, 2), nullable=False, server_default="0.50"
-        ),
+        sa.Column("video_audio_gain", sa.Numeric(3, 2), nullable=False, server_default="0.50"),
+        sa.Column("music_audio_gain", sa.Numeric(3, 2), nullable=False, server_default="0.50"),
         sa.Column("delete_after_stream", sa.Boolean, nullable=False, server_default="true"),
         sa.Column("prep_status", sa.String(20), nullable=False, server_default="queued"),
         sa.Column("stream_status", sa.String(20), nullable=False, server_default="queued"),
@@ -159,18 +155,14 @@ def upgrade() -> None:
         "stream_events",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("event_type", sa.String(30), nullable=False),
-        sa.Column(
-            "plan_id", UUID(as_uuid=True), sa.ForeignKey("stream_plans.id"), nullable=True
-        ),
+        sa.Column("plan_id", UUID(as_uuid=True), sa.ForeignKey("stream_plans.id"), nullable=True),
         sa.Column(
             "plan_item_id",
             UUID(as_uuid=True),
             sa.ForeignKey("stream_plan_items.id"),
             nullable=True,
         ),
-        sa.Column(
-            "asset_id", UUID(as_uuid=True), sa.ForeignKey("library_assets.id"), nullable=True
-        ),
+        sa.Column("asset_id", UUID(as_uuid=True), sa.ForeignKey("library_assets.id"), nullable=True),
         sa.Column(
             "occurred_at",
             sa.DateTime(timezone=True),

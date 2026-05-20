@@ -31,13 +31,9 @@ def upgrade() -> None:
     # Login flow
     op.add_column("domain_policies", sa.Column("login_url", sa.Text(), nullable=True))
     op.add_column("domain_policies", sa.Column("login_email_selector", sa.Text(), nullable=True))
-    op.add_column(
-        "domain_policies", sa.Column("login_password_selector", sa.Text(), nullable=True)
-    )
+    op.add_column("domain_policies", sa.Column("login_password_selector", sa.Text(), nullable=True))
     op.add_column("domain_policies", sa.Column("login_submit_selector", sa.Text(), nullable=True))
-    op.add_column(
-        "domain_policies", sa.Column("login_success_selector", sa.Text(), nullable=True)
-    )
+    op.add_column("domain_policies", sa.Column("login_success_selector", sa.Text(), nullable=True))
 
     # Credentials (stored in DB — no more .env hardcoding)
     op.add_column("domain_policies", sa.Column("credential_email", sa.Text(), nullable=True))
@@ -61,9 +57,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "domain_policies",
-        sa.Column(
-            "requires_login", sa.Boolean(), nullable=False, server_default=sa.text("false")
-        ),
+        sa.Column("requires_login", sa.Boolean(), nullable=False, server_default=sa.text("false")),
     )
     op.add_column(
         "domain_policies",

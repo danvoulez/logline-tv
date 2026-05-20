@@ -32,7 +32,11 @@ async def generate_daily_report(db: AsyncSession, report_date: date) -> DailyRep
     plan_ids = [p.id for p in plans]
 
     # Items
-    q_items = select(StreamPlanItem).where(StreamPlanItem.stream_plan_id.in_(plan_ids)) if plan_ids else select(StreamPlanItem).where(False)  # noqa: E501
+    q_items = (
+        select(StreamPlanItem).where(StreamPlanItem.stream_plan_id.in_(plan_ids))
+        if plan_ids
+        else select(StreamPlanItem).where(False)
+    )  # noqa: E501
     items = list((await db.execute(q_items)).scalars().all())
 
     completed = [i for i in items if i.stream_status == StreamItemStatus.completed]
@@ -66,18 +70,12 @@ async def generate_daily_report(db: AsyncSession, report_date: date) -> DailyRep
     top_repeated = sorted(asset_counts.items(), key=lambda x: x[1], reverse=True)[:5]
 
     # Blocked assets count
-    q_blocked = (
-        select(func.count())
-        .select_from(LibraryAsset)
-        .where(LibraryAsset.rights_status == RightsStatus.blocked)
-    )
+    q_blocked = select(func.count()).select_from(LibraryAsset).where(LibraryAsset.rights_status == RightsStatus.blocked)
     blocked_count = (await db.execute(q_blocked)).scalar() or 0
 
     # Pending review count
     q_pending = (
-        select(func.count())
-        .select_from(LibraryAsset)
-        .where(LibraryAsset.rights_status == RightsStatus.pending_review)
+        select(func.count()).select_from(LibraryAsset).where(LibraryAsset.rights_status == RightsStatus.pending_review)
     )
     pending_count = (await db.execute(q_pending)).scalar() or 0
 

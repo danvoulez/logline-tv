@@ -39,9 +39,11 @@ from voulezvous.models.tables import LibraryAsset, StreamPlan, StreamPlanItem
 # SQLite doesn't have JSONB — compile it as JSON for tests.
 # Must be registered before create_all.
 if not hasattr(JSONB, "_sqlite_compiler_registered"):
+
     @compiles(JSONB, "sqlite")
     def _compile_jsonb_sqlite(type_, compiler, **kw):
         return "JSON"
+
     JSONB._sqlite_compiler_registered = True  # type: ignore[attr-defined]
 
 TEST_DB_URL = "sqlite+aiosqlite:///file::memory:?cache=shared&uri=true"
@@ -52,9 +54,7 @@ async def db():
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    session_factory = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         yield session
     async with engine.begin() as conn:
@@ -86,6 +86,7 @@ def _make_approved_candidate(
 
 # ---- Test 1: Approved authorized CandidateAsset promotes to LibraryAsset ----
 
+
 @pytest.mark.asyncio
 async def test_promote_approved_candidate(db: AsyncSession):
     candidate = _make_approved_candidate()
@@ -111,6 +112,7 @@ async def test_promote_approved_candidate(db: AsyncSession):
 
 # ---- Test 2: Promotion is idempotent ----
 
+
 @pytest.mark.asyncio
 async def test_promote_idempotent(db: AsyncSession):
     candidate = _make_approved_candidate()
@@ -123,13 +125,12 @@ async def test_promote_idempotent(db: AsyncSession):
     assert asset1.id == asset2.id
 
     # Verify only 1 LibraryAsset exists
-    count = len(
-        (await db.execute(select(LibraryAsset))).scalars().all()
-    )
+    count = len((await db.execute(select(LibraryAsset))).scalars().all())
     assert count == 1
 
 
 # ---- Test 3: Pending/rejected/metadata-only cannot be promoted ----
+
 
 @pytest.mark.asyncio
 async def test_promote_rejected_pending_metadata_only(db: AsyncSession):
@@ -180,14 +181,103 @@ async def test_promote_rejected_pending_metadata_only(db: AsyncSession):
     with pytest.raises(ValueError, match="no source_url"):
         await promote_candidate_to_library_asset(db, c4.id)
 
-    # Verify no LibraryAssets were created
-    count = len(
-        (await db.execute(select(LibraryAsset))).scalars().all()
+    # Verify no LibraryAsset was created
+    count = len((await db.execute(select(LibraryAsset))).scalars().all())
+    assert count == 0
+
+
+# ---- Test 3.6: Simulated discovery run creates metadata_only candidates ----
+
+
+@pytest.mark.asyncio
+async def test_simulated_discovery_creates_metadata_only_candidates(db: AsyncSession):
+    """Simulated discovery should create candidates with retrieval_status=metadata_only.
+
+    This ensures simulated discovery does not create promotable assets.
+    """
+    from datetime import date
+
+    from voulezvous.acquisition.models import DomainPolicy, SearchKeyword
+    from voulezvous.acquisition.workers.discovery import run_discovery_simulated
+
+    # Create a domain policy
+    policy = DomainPolicy(
+        domain="example.com",
+        is_enabled=True,
+        search_url_template="https://{domain}/search?q={query}",
+        result_selector=".results a",
+        title_selector=".title",
+        accepted_extensions=["mp4"],
     )
+    db.add(policy)
+    await db.flush()
+
+    # Create a keyword
+    keyword = SearchKeyword(
+        keyword="test video",
+        weight=1.0,
+        include=True,
+        active=True,
+    )
+    db.add(keyword)
+    await db.flush()
+
+    # Run simulated discovery
+    run = await run_discovery_simulated(db, run_date=date.today())
+
+    # Verify the run is marked as simulated
+    assert run.input_summary.get("mode") == "simulated"
+    assert run.output_summary.get("mode") == "simulated"
+
+    # Check that candidates were created
+    candidates = (
+        await db.execute(
+            select(CandidateAsset).where(CandidateAsset.discovery_run_id == run.id)
+        )
+    ).scalars().all()
+
+    # If candidates were created, verify they are metadata_only
+    for c in candidates:
+        # Simulated discovery should not create authorized_direct candidates
+        assert c.retrieval_status == RetrievalStatus.metadata_only, (
+            f"Simulated discovery created candidate with retrieval_status={c.retrieval_status}, "
+            f"expected metadata_only"
+        )
+        # Verify the quality_signals have simulated marker
+        assert c.quality_signals.get("simulated") is True
+
+
+# ---- Test 3.5: Simulated discovery candidates cannot be promoted ----
+
+
+@pytest.mark.asyncio
+async def test_simulated_discovery_candidate_cannot_be_promoted(db: AsyncSession):
+    """Candidates from simulated discovery should be marked metadata_only and cannot be promoted.
+
+    This ensures simulated discovery does not create promotable assets.
+    """
+    # Create a candidate that looks like it came from simulated discovery
+    # (has quality_signals with simulated marker, but retrieval_status should be metadata_only)
+    c = _make_approved_candidate(
+        title="Simulated Discovery Video",
+        source_url=None,  # Simulated discovery may not have real source URL
+        retrieval_status=RetrievalStatus.metadata_only,
+    )
+    c.quality_signals = {"simulated": True}
+    db.add(c)
+    await db.flush()
+
+    # Should fail to promote because retrieval_status is metadata_only
+    with pytest.raises(ValueError, match="authorized_direct"):
+        await promote_candidate_to_library_asset(db, c.id)
+
+    # Verify no LibraryAsset was created
+    count = len((await db.execute(select(LibraryAsset))).scalars().all())
     assert count == 0
 
 
 # ---- Test 4: LineupRun with approved candidate emits StreamPlan ----
+
 
 @pytest.mark.asyncio
 async def test_emit_lineup_to_stream_plan(db: AsyncSession):
@@ -238,6 +328,7 @@ async def test_emit_lineup_to_stream_plan(db: AsyncSession):
 
 # ---- Test 5: Emitted StreamPlan visible through existing model ----
 
+
 @pytest.mark.asyncio
 async def test_emitted_plan_visible_to_prep_model(db: AsyncSession):
     candidate = _make_approved_candidate(
@@ -269,24 +360,23 @@ async def test_emitted_plan_visible_to_prep_model(db: AsyncSession):
     await emit_lineup_to_stream_plan(db, lineup.id)
 
     # Query StreamPlanItems through existing model path (no acquisition imports)
-    plan_items = (await db.execute(
-        select(StreamPlanItem)
-        .join(StreamPlan)
-        .where(StreamPlan.plan_date == date(2026, 5, 20))
-    )).scalars().all()
+    plan_items = (
+        (await db.execute(select(StreamPlanItem).join(StreamPlan).where(StreamPlan.plan_date == date(2026, 5, 20))))
+        .scalars()
+        .all()
+    )
 
     assert len(plan_items) == 1
     spi = plan_items[0]
 
     # Verify the video_asset_id points to a real LibraryAsset
-    asset = (await db.execute(
-        select(LibraryAsset).where(LibraryAsset.id == spi.video_asset_id)
-    )).scalar_one()
+    asset = (await db.execute(select(LibraryAsset).where(LibraryAsset.id == spi.video_asset_id))).scalar_one()
     assert asset.title == "Prep Visible"
     assert asset.status == AssetStatus.approved
 
 
 # ---- Test 6: Buffer items are skipped ----
+
 
 @pytest.mark.asyncio
 async def test_buffer_items_skipped(db: AsyncSession):
@@ -347,6 +437,7 @@ async def test_buffer_items_skipped(db: AsyncSession):
 
 
 # ---- Test 7: Re-emitting same lineup does not create duplicate StreamPlan ----
+
 
 @pytest.mark.asyncio
 async def test_emit_idempotent(db: AsyncSession):

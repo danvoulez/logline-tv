@@ -70,9 +70,7 @@ async def run_user_discovery(
                     submit_selector=adapter.LOGIN_SUBMIT_SEL,
                     success_check=adapter.LOGIN_SUCCESS_SEL,
                 )
-                if not login_result.get("success") and not login_result.get(
-                    "already_logged_in"
-                ):
+                if not login_result.get("success") and not login_result.get("already_logged_in"):
                     logger.warning(
                         "user_login_failed",
                         domain=domain,
@@ -83,9 +81,7 @@ async def run_user_discovery(
         await runtime.navigate(profile_url)
         await asyncio.sleep(3)
 
-        links = await runtime.extract_links(
-            selector=adapter.result_selector, max_results=max_videos
-        )
+        links = await runtime.extract_links(selector=adapter.result_selector, max_results=max_videos)
 
         if not links:
             links = await runtime.extract_links(
@@ -103,8 +99,15 @@ async def run_user_discovery(
                 continue
 
             skip_patterns = [
-                "/search", "/tag", "/category", "/channel", "/profile",
-                "/login", "/register", "/premium", "/upload",
+                "/search",
+                "/tag",
+                "/category",
+                "/channel",
+                "/profile",
+                "/login",
+                "/register",
+                "/premium",
+                "/upload",
             ]
             if any(p in href.lower() for p in skip_patterns):
                 continue
@@ -160,11 +163,7 @@ async def run_user_discovery(
                 source_url=download_url or href,
                 page_url=href,
                 duration_sec=duration_sec,
-                retrieval_status=(
-                    RetrievalStatus.authorized_direct
-                    if authorized
-                    else RetrievalStatus.metadata_only
-                ),
+                retrieval_status=(RetrievalStatus.authorized_direct if authorized else RetrievalStatus.metadata_only),
                 rights_status=CandidateRightsStatus.pending_review,
                 discovery_status=DiscoveryStatus.found,
                 tags=tags,
