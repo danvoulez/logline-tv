@@ -105,6 +105,7 @@ services:
     logging: *default-logging
 
   # Autonomous Director — LLM-bounded loop (5-min ticks)
+  # Runs only when profile=director is enabled.
   director:
     build: .
     command: app director
@@ -126,6 +127,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    profiles: ["director"]
     logging: *default-logging
 
   # Acquisition orchestrator — runs only when profile=acq is enabled.

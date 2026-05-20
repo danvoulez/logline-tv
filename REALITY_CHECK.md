@@ -371,13 +371,14 @@ total 30732
 # - All tests pass (42 passed), ruff check passes, compileall passes
 ```
 
-**Phase 2.5**: ✅ COMPLETE (with caveats)
+**Phase 2.5**: ✅ COMPLETE
 - HLS MIME types: verified
 - Media-client playback via ffmpeg: verified (with expected discontinuity warnings)
-- Browser playback: limited verification (endpoint accessible, full playback untested)
+- Browser playback: verified (HLS.js successfully played stream, video advanced to 45s)
 - Item-event plan_id traceability: verified (fixed local media prep path)
 - Restart safety with item content: verified
 - Local media prep path: fixed and tested
+- Director isolation: verified (Director behind profile, does not start with core admission)
 
 ### Phase 2.5 Receipt
 ```bash
@@ -577,18 +578,69 @@ cd /Users/ubl-ops/logline-tv && uv run pytest tests/test_p0_regressions.py -v
 # Output: All 10 P0 regression tests pass
 ======================== 10 passed, 4 warnings in 3.52s =========================
 
+# FIX: Director isolation - added profile to prevent automatic startup
+# File: docker-compose.yml
+# Added profiles: ["director"] to director service
+# Director now only starts with: docker compose --profile director up -d director
+
+# FIX: Updated README to document Director profile
+# File: README.md
+# Added separate step for starting Director with profile
+# Core admission command: docker compose up -d --build (no Director)
+# Director start command: docker compose --profile director up -d director
+
+# FIX: Added .DS_Store to .gitignore
+# File: .gitignore
+# Added: .DS_Store and **/.DS_Store to prevent macOS file tracking
+
+# Command: Clean lab admission without Director
+ssh danvoulez@lab-512.local "cd ~/logline-tv && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose down -v && docker compose up -d --build db migrate api prep-worker streamer"
+
+# Output: Core services started, Director not running
+Container logline-tv-db-1 Created (healthy)
+Container logline-tv-migrate-1 Exited (0)
+Container logline-tv-api-1 Created (running)
+Container logline-tv-prep-worker-1 Created (running)
+Container logline-tv-streamer-1 Created (running)
+
+# Command: Verify Director not running
+ssh danvoulez@lab-512.local "cd ~/logline-tv && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose ps"
+
+# Output: Only core services running, no director container
+NAME                       SERVICE       STATUS
+logline-tv-api-1           api           Up
+logline-tv-db-1            db            Up (healthy)
+logline-tv-prep-worker-1   prep-worker   Up
+logline-tv-streamer-1      streamer      Up
+
+# Command: Verify no Director logs during admission
+ssh danvoulez@lab-512.local "cd ~/logline-tv && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose logs director --tail 20 || true"
+
+# Output: No Director logs (Director not running)
+(empty output)
+
+# Command: Browser playback verification with HLS.js
+cd /Users/ubl-ops/.agents/skills/playwright && node run.js /tmp/playwright-test-hls-full.js
+
+# Output: HLS.js successfully played stream
+Testing HLS playback with hls.js: http://lab-512.local:8000/hls/stream.m3u8
+Status after 10s: [06:03:59.925] Fragment loaded: http://lab-512.local:8000/hls/seg_00013.ts
+Final status after 20s: [06:04:05.735] Fragment loaded: http://lab-512.local:8000/hls/seg_00015.ts
+Video playing? true Current time: 44.959787
+
 # Verification state:
 # - HLS MIME types: verified (playlist: application/vnd.apple.mpegurl, segments: video/mp2t)
 # - Media-client playback via ffmpeg: verified (ffprobe detects valid streams, ffmpeg plays with expected discontinuity warnings)
-# - Browser playback: limited verification (HLS endpoint accessible from browser, full video playback untested)
+# - Browser playback: verified (HLS.js successfully played stream, video advanced to 45s, fragments loading)
 # - Item-event plan_id traceability: verified (item_started, item_completed events have non-null plan_id, plan_item_id, asset_id)
 # - Restart safety with item content: verified (streamer/director restarted, continued streaming with proper event generation)
 # - Local media prep path: fixed (changed from file:// URLs to local_source_path with validation)
-# - Local admission: verified (all prep, HLS serving, and P0 regression tests pass)
+# - Director isolation: verified (Director behind profile, does not start with core admission, no Director logs during admission)
+# - Local admission: verified (ruff passes, 54 tests pass, compileall passes)
 ```
 
 **Phase 3**: ⚠️ PARTIAL
-- Restart safety: tested (streamer and director restart with item content verified)
+- Restart safety: verified (streamer and director restart with item content verified)
 - Error handling: not verified
 - Cleanup: partially verified (prepared file cleanup working, old HLS segment cleanup not tested)
 
@@ -609,13 +661,14 @@ cd /Users/ubl-ops/logline-tv && uv run pytest tests/test_p0_regressions.py -v
 3. ✅ Test manual channel operation with local file (complete)
 4. ✅ Fix HLS format configuration (changed from FLV to HLS)
 5. ✅ Use reliable local test videos instead of external archive.org dependencies
-6. ⏳ Verify HLS streaming and browser playback (HLS generation working, browser playback pending)
-7. Test restart safety
-8. Implement and test cleanup jobs
-9. Verify Director autonomy with real discovery
-10. Implement credential encryption
-11. Add integration tests for end-to-end flow
-12. Load test with 24h programming
+6. ✅ Verify HLS streaming and browser playback (HLS generation working, browser playback verified with HLS.js)
+7. ✅ Test restart safety (verified with item content)
+8. ✅ Isolate Director from core admission (Director behind profile)
+9. Implement and test cleanup jobs
+10. Verify Director autonomy with real discovery
+11. Implement credential encryption
+12. Add integration tests for end-to-end flow
+13. Load test with 24h programming
 
 ## Notes
 
@@ -633,7 +686,19 @@ cd /Users/ubl-ops/logline-tv && uv run pytest tests/test_p0_regressions.py -v
   * Fallback video generation working (10s black screen with 440Hz tone)
   * Database updates working (asset ficha, stream events)
   * Cleanup working (prepared files deleted after streaming)
-  * All tests pass (42 passed), ruff check passes, compileall passes
+  * All tests pass (54 passed), ruff check passes, compileall passes
+- Phase 2.5 (Runtime Verification) complete:
+  * Local media prep path fixed (changed from file:// URLs to local_source_path with validation)
+  * Item-level stream event traceability verified (plan_id, plan_item_id, asset_id non-null)
+  * HLS MIME types verified (playlist: application/vnd.apple.mpegurl, segments: video/mp2t)
+  * Media-client playback verified via ffmpeg (with expected discontinuity warnings)
+  * Browser playback verified via HLS.js (video successfully played, advanced to 45s)
+  * Restart safety verified with item content (streamer/director restart, continued streaming)
+  * Director isolation verified (Director behind profile, does not start with core admission)
+- The FK cycle warning between candidate_assets and retrieval_adapters still needs resolution
+- Director autonomy testing requires explicit profile activation: docker compose --profile director up -d director
+- Consider adding Postgres-specific tests to the CI pipeline
+- Monitoring and alerting should be added before production deployment
 - The FK cycle warning between candidate_assets and retrieval_adapters still needs resolution
 - Consider adding Postgres-specific tests to the CI pipeline
 - Monitoring and alerting should be added before production deployment

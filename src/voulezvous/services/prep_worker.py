@@ -25,10 +25,10 @@ logger = structlog.get_logger()
 
 def _validate_local_path(path: Path) -> None:
     """Validate that a local path is within the spool directory for security.
-    
+
     Args:
         path: Path to validate
-        
+
     Raises:
         ValueError: If path is outside spool directory or contains path traversal
     """
@@ -36,7 +36,7 @@ def _validate_local_path(path: Path) -> None:
         # Resolve to absolute path and check for path traversal
         resolved = path.resolve()
         spool_root = settings.spool_root.resolve()
-        
+
         # Check if resolved path is within spool_root
         try:
             resolved.relative_to(spool_root)

@@ -61,14 +61,14 @@ async def test_prep_rejects_unapproved_asset(db: AsyncSession):
 def test_validate_local_path_accepts_valid_spool_path():
     """Local paths within spool directory should be accepted."""
     from voulezvous.config import settings
-    
+
     # Test valid paths under spool
     valid_paths = [
         settings.spool_root / "test_media" / "test.mp4",
         settings.spool_root / "downloads" / "video.mp4",
         settings.spool_root / "prepared" / "item.mp4",
     ]
-    
+
     for path in valid_paths:
         # Should not raise
         _validate_local_path(path)
@@ -77,7 +77,7 @@ def test_validate_local_path_accepts_valid_spool_path():
 def test_validate_local_path_rejects_path_traversal():
     """Path traversal attempts should be rejected."""
     from voulezvous.config import settings
-    
+
     # Test path traversal attempts
     traversal_paths = [
         settings.spool_root / ".." / "etc" / "passwd",
@@ -85,7 +85,7 @@ def test_validate_local_path_rejects_path_traversal():
         Path("/etc/passwd"),
         Path("/tmp/../../etc/passwd"),
     ]
-    
+
     for path in traversal_paths:
         with pytest.raises(ValueError, match="outside spool directory|Invalid local path"):
             _validate_local_path(path)
@@ -93,15 +93,14 @@ def test_validate_local_path_rejects_path_traversal():
 
 def test_validate_local_path_rejects_absolute_path_outside_spool():
     """Absolute paths outside spool should be rejected."""
-    from voulezvous.config import settings
-    
+
     # Test absolute paths outside spool
     outside_paths = [
         Path("/tmp/test.mp4"),
         Path("/home/user/video.mp4"),
         Path("/var/lib/video.mp4"),
     ]
-    
+
     for path in outside_paths:
         with pytest.raises(ValueError, match="outside spool directory"):
             _validate_local_path(path)
