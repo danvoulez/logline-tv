@@ -296,8 +296,8 @@ async def run_discovery_simulated(db: AsyncSession, run_date: date | None = None
                 f"https://{policy.domain}/download/{kw.keyword.replace(' ', '_')}/video.mp4" if is_archive else None
             )
 
-            has_retrieval, retrieval_type = adapter.classify_retrieval(source_url, {})
-
+            # Simulated discovery NEVER creates authorized_direct candidates
+            # All simulated candidates are metadata_only and cannot be promoted
             candidate = CandidateAsset(
                 discovery_run_id=run.id,
                 domain_policy_id=policy.id,
@@ -310,29 +310,11 @@ async def run_discovery_simulated(db: AsyncSession, run_date: date | None = None
                 extra_metadata={"domain": policy.domain, "keyword": kw.keyword},
                 playback_verified=is_archive,
                 discovery_status=DiscoveryStatus.inspected,
+                retrieval_status=RetrievalStatus.metadata_only,
             )
-
-            if has_retrieval and retrieval_type:
-                candidate.retrieval_status = RetrievalStatus.authorized_direct
-                candidate.discovery_status = DiscoveryStatus.accepted
-                db.add(candidate)
-                await db.flush()
-                adapter_record = RetrievalAdapter(
-                    candidate_asset_id=candidate.id,
-                    adapter_type=AdapterType(retrieval_type),
-                    adapter_spec={"url": source_url},
-                )
-                db.add(adapter_record)
-                await db.flush()
-                candidate.retrieval_adapter_id = adapter_record.id
-                total_accepted += 1
-            else:
-                candidate.retrieval_status = RetrievalStatus.metadata_only
-                candidate.discovery_status = DiscoveryStatus.inspected
-                total_metadata_only += 1
-
             db.add(candidate)
             total_found += 1
+            total_metadata_only += 1
 
     run.status = DiscoveryRunStatus.completed
     run.output_summary = {

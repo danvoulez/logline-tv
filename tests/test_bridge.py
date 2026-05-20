@@ -181,7 +181,97 @@ async def test_promote_rejected_pending_metadata_only(db: AsyncSession):
     with pytest.raises(ValueError, match="no source_url"):
         await promote_candidate_to_library_asset(db, c4.id)
 
-    # Verify no LibraryAssets were created
+    # Verify no LibraryAsset was created
+    count = len((await db.execute(select(LibraryAsset))).scalars().all())
+    assert count == 0
+
+
+# ---- Test 3.6: Simulated discovery run creates metadata_only candidates ----
+
+
+@pytest.mark.asyncio
+async def test_simulated_discovery_creates_metadata_only_candidates(db: AsyncSession):
+    """Simulated discovery should create candidates with retrieval_status=metadata_only.
+
+    This ensures simulated discovery does not create promotable assets.
+    """
+    from datetime import date
+
+    from voulezvous.acquisition.models import DomainPolicy, SearchKeyword
+    from voulezvous.acquisition.workers.discovery import run_discovery_simulated
+
+    # Create a domain policy
+    policy = DomainPolicy(
+        domain="example.com",
+        is_enabled=True,
+        search_url_template="https://{domain}/search?q={query}",
+        result_selector=".results a",
+        title_selector=".title",
+        accepted_extensions=["mp4"],
+    )
+    db.add(policy)
+    await db.flush()
+
+    # Create a keyword
+    keyword = SearchKeyword(
+        keyword="test video",
+        weight=1.0,
+        include=True,
+        active=True,
+    )
+    db.add(keyword)
+    await db.flush()
+
+    # Run simulated discovery
+    run = await run_discovery_simulated(db, run_date=date.today())
+
+    # Verify the run is marked as simulated
+    assert run.input_summary.get("mode") == "simulated"
+    assert run.output_summary.get("mode") == "simulated"
+
+    # Check that candidates were created
+    candidates = (
+        await db.execute(
+            select(CandidateAsset).where(CandidateAsset.discovery_run_id == run.id)
+        )
+    ).scalars().all()
+
+    # If candidates were created, verify they are metadata_only
+    for c in candidates:
+        # Simulated discovery should not create authorized_direct candidates
+        assert c.retrieval_status == RetrievalStatus.metadata_only, (
+            f"Simulated discovery created candidate with retrieval_status={c.retrieval_status}, "
+            f"expected metadata_only"
+        )
+        # Verify the quality_signals have simulated marker
+        assert c.quality_signals.get("simulated") is True
+
+
+# ---- Test 3.5: Simulated discovery candidates cannot be promoted ----
+
+
+@pytest.mark.asyncio
+async def test_simulated_discovery_candidate_cannot_be_promoted(db: AsyncSession):
+    """Candidates from simulated discovery should be marked metadata_only and cannot be promoted.
+
+    This ensures simulated discovery does not create promotable assets.
+    """
+    # Create a candidate that looks like it came from simulated discovery
+    # (has quality_signals with simulated marker, but retrieval_status should be metadata_only)
+    c = _make_approved_candidate(
+        title="Simulated Discovery Video",
+        source_url=None,  # Simulated discovery may not have real source URL
+        retrieval_status=RetrievalStatus.metadata_only,
+    )
+    c.quality_signals = {"simulated": True}
+    db.add(c)
+    await db.flush()
+
+    # Should fail to promote because retrieval_status is metadata_only
+    with pytest.raises(ValueError, match="authorized_direct"):
+        await promote_candidate_to_library_asset(db, c.id)
+
+    # Verify no LibraryAsset was created
     count = len((await db.execute(select(LibraryAsset))).scalars().all())
     assert count == 0
 
