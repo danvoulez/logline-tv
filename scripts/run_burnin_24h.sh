@@ -5,13 +5,31 @@ set -e
 DURATION_HOURS=${DURATION_HOURS:-24}
 SAMPLE_EVERY_SEC=${SAMPLE_EVERY_SEC:-300}
 RESTART_AT_HOUR=${RESTART_AT_HOUR:-6}
+PLAN_ID="${PLAN_ID:-}"
 
 echo "=== 24h Burn-in Runner ==="
 echo "Duration: ${DURATION_HOURS} hours"
 echo "Sample interval: ${SAMPLE_EVERY_SEC} seconds"
 echo "Streamer restart at hour: ${RESTART_AT_HOUR}"
+if [ -n "${PLAN_ID}" ]; then
+  echo "Plan ID: ${PLAN_ID}"
+fi
 echo "Start time: $(date -u)"
 echo ""
+
+# Wait for ready buffer before starting stream
+echo "Waiting for ready buffer threshold..."
+if [ -n "${PLAN_ID}" ]; then
+  ./scripts/wait_for_ready_buffer.sh "${PLAN_ID}"
+else
+  ./scripts/wait_for_ready_buffer.sh
+fi
+
+# Start stream
+echo "Starting stream..."
+curl -s -X POST http://localhost:8000/stream/start
+echo ""
+sleep 5
 
 # Initial probe
 echo "Running initial probe..."

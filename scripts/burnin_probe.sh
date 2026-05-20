@@ -2,6 +2,7 @@
 # Burn-in probe script - collects timestamped system state samples
 # Reports are written to ./burnin_reports/burnin_YYYYMMDD.log (host directory, not /spool)
 
+PLAN_ID="${PLAN_ID:-}"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 REPORT_DIR="./burnin_reports"
 REPORT_FILE="${REPORT_DIR}/burnin_$(date +%Y%m%d).log"
@@ -9,6 +10,9 @@ REPORT_FILE="${REPORT_DIR}/burnin_$(date +%Y%m%d).log"
 mkdir -p "${REPORT_DIR}"
 
 echo "=== Burn-in Probe: ${TIMESTAMP} ===" >> "${REPORT_FILE}"
+if [ -n "${PLAN_ID}" ]; then
+  echo "PLAN_ID: ${PLAN_ID}" >> "${REPORT_FILE}"
+fi
 
 # docker compose ps
 echo "--- Docker Compose PS ---" >> "${REPORT_FILE}"
@@ -53,11 +57,19 @@ docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT * FROM str
 
 # last 20 stream_events
 echo "--- Last 20 Stream Events ---" >> "${REPORT_FILE}"
-docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT event_type, plan_id, plan_item_id, asset_id, occurred_at FROM stream_events ORDER BY occurred_at DESC LIMIT 20;" >> "${REPORT_FILE}" 2>&1 || echo "ERROR: Failed to query stream_events" >> "${REPORT_FILE}"
+if [ -n "${PLAN_ID}" ]; then
+  docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT event_type, plan_id, plan_item_id, asset_id, occurred_at FROM stream_events WHERE plan_id = '${PLAN_ID}' ORDER BY occurred_at DESC LIMIT 20;" >> "${REPORT_FILE}" 2>&1 || echo "ERROR: Failed to query stream_events" >> "${REPORT_FILE}"
+else
+  docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT event_type, plan_id, plan_item_id, asset_id, occurred_at FROM stream_events ORDER BY occurred_at DESC LIMIT 20;" >> "${REPORT_FILE}" 2>&1 || echo "ERROR: Failed to query stream_events" >> "${REPORT_FILE}"
+fi
 
 # item_started/item_completed/item_failed counts
 echo "--- Stream Plan Item Status Counts ---" >> "${REPORT_FILE}"
-docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT stream_status, COUNT(*) FROM stream_plan_items GROUP BY stream_status ORDER BY stream_status;" >> "${REPORT_FILE}" 2>&1
+if [ -n "${PLAN_ID}" ]; then
+  docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT stream_status, COUNT(*) FROM stream_plan_items WHERE stream_plan_id = '${PLAN_ID}' GROUP BY stream_status ORDER BY stream_status;" >> "${REPORT_FILE}" 2>&1
+else
+  docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT stream_status, COUNT(*) FROM stream_plan_items GROUP BY stream_status ORDER BY stream_status;" >> "${REPORT_FILE}" 2>&1
+fi
 
 # latest streamer logs tail
 echo "--- Streamer Logs (last 50 lines) ---" >> "${REPORT_FILE}"

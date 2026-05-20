@@ -1291,51 +1291,28 @@ ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew s
 
 ## Phase 6 — 24h Burn-in
 
+### Phase 6 burn-in attempt 1: failed
+
+Reason:
+  Stream was started before sufficient ready buffer existed.
+  Prep worker could not keep up from cold start.
+  Streamer entered repeated fallback after consuming the initial ready items.
+
+Finding:
+  Continuous operation needs an explicit prep readiness gate.
+
+Fix:
+  STREAM_MIN_READY_BUFFER_SEC added (default 1800s / 30 min).
+  /stream/start now rejects below threshold with explicit error response.
+  /obs/snapshot exposes ready buffer fields (ready_buffer_sec, ready_buffer_min, ready_items, queued_items).
+  calculate_ready_buffer() helper added to compute ready duration for queued stream items.
+  burn-in runner (run_burnin_24h.sh) waits for readiness before starting stream.
+  wait_for_ready_buffer.sh script added for polling readiness.
+  generate_plan.sh script added to capture PLAN_ID exactly once.
+  burnin_probe.sh updated to filter by PLAN_ID when provided.
+
 Status:
-  failed
-
-Duration:
-  start: 2026-05-20T12:36:37Z
-  end: 2026-05-20T12:41:00Z (stopped after ~4 minutes)
-
-Restart performed:
-  No (burn-in failed before planned restart at hour 6)
-
-HLS availability:
-  playlist: HTTP 200, content-type application/vnd.apple.mpegurl
-  segments: HTTP 200, content-type video/mp2t
-
-Segment count range:
-  start: 2592
-  end: 2592 (stable)
-
-Spool disk start/end:
-  start: 200M /spool
-  end: 200M /spool (stable)
-
-Stream events:
-  item_started: 11
-  item_completed: 11
-  item_failed: 0
-  fallback_started: 7
-  fallback_stopped: 6
-
-Director absent:
-  Yes (verified via docker compose ps)
-
-acquisition absent:
-  Yes (verified via docker compose ps)
-
-Failure reason:
-  Prep queue exhaustion - only 11 ready/completed items out of 17269 queued for 24h plan
-  Streamer fell into continuous fallback mode because prep_worker could not keep up
-  Fallback replaced item playback for extended period without explicit recovery
-  Deterministic media (3 videos) insufficient for 24h streaming demand
-
-Root cause:
-  24h plan requires significantly more media diversity than 3 deterministic test videos
-  Prep_worker single-threaded processing cannot keep up with real-time streaming demand
-  No admission issue - system functions correctly but lacks content diversity for 24h operation
+  24h burn-in remains unverified.
 
 Receipt:
 ```bash
@@ -1358,6 +1335,104 @@ du -sh /spool
 # HLS segment count
 ls /spool/hls/*.ts | wc -l
 # Result: 2592 (stable, bounded)
+```
+
+### Phase 6 Readiness Gate Implementation
+
+```bash
+# Config added to src/voulezvous/config.py
+stream_min_ready_buffer_sec: int = 1800
+burnin_ready_timeout_sec: int = 1800
+
+# Helper added to src/voulezvous/services/stream_control.py
+async def calculate_ready_buffer(
+    db: AsyncSession,
+    plan_id: uuid.UUID | None = None,
+) -> dict:
+    """Calculate ready buffer for stream start admission.
+
+    Returns:
+        Dict with:
+        - ready_items: count of ready items
+        - ready_duration_sec: sum of target_duration_sec for ready items
+        - queued_items: count of queued items
+        - queued_duration_sec: sum of target_duration_sec for queued items
+
+    Filters by plan_id if provided, otherwise includes all active plans.
+    """
+
+# Exception added to src/voulezvous/services/stream_control.py
+class ReadyBufferBelowThresholdError(Exception):
+    """Raised when stream start is requested but ready buffer is below threshold."""
+
+    def __init__(self, ready_buffer_sec: int, min_ready_buffer_sec: int):
+        self.ready_buffer_sec = ready_buffer_sec
+        self.min_ready_buffer_sec = min_ready_buffer_sec
+        super().__init__(
+            f"Ready buffer ({ready_buffer_sec}s) below threshold ({min_ready_buffer_sec}s). "
+            "Wait for prep_worker to prepare more items before starting stream."
+        )
+
+# request_stream_start updated to check ready buffer
+async def request_stream_start(db: AsyncSession) -> StreamControl:
+    # Check ready buffer before allowing start
+    ready_buffer = await calculate_ready_buffer(db)
+    if ready_buffer["ready_duration_sec"] < settings.stream_min_ready_buffer_sec:
+        raise ReadyBufferBelowThresholdError(
+            ready_buffer_sec=ready_buffer["ready_duration_sec"],
+            min_ready_buffer_sec=settings.stream_min_ready_buffer_sec,
+        )
+
+    control = await get_or_create_stream_control(db)
+    control.desired_running = True
+    control.status = "start_requested"
+    control.heartbeat_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(control)
+    return control
+
+# API endpoint updated to handle readiness rejection
+# src/voulezvous/api/routers/stream.py
+@router.post("/start")
+async def stream_start(db: AsyncSession = Depends(get_db)):
+    try:
+        control = await request_stream_start(db)
+        return {"status": control.status, "desired_running": control.desired_running}
+    except ReadyBufferBelowThresholdError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "status": "rejected",
+                "reason": "ready_buffer_below_threshold",
+                "ready_buffer_sec": e.ready_buffer_sec,
+                "min_ready_buffer_sec": e.min_ready_buffer_sec,
+            },
+        )
+
+# Observability snapshot updated to include ready buffer
+# src/voulezvous/api/routers/observability.py
+ready_buffer = await calculate_ready_buffer(db)
+ready_buffer_min = round(ready_buffer["ready_duration_sec"] / 60, 2)
+
+pipeline = {
+    "queued_hours": round(int(queued_sec) / 3600, 2),
+    "ready_buffer_sec": ready_buffer["ready_duration_sec"],
+    "ready_buffer_min": ready_buffer_min,
+    "ready_items": ready_buffer["ready_items"],
+    "queued_items": ready_buffer["queued_items"],
+    "disk": disk_usage_spool(),
+    "plan": plan_block,
+}
+
+# Scripts added
+# scripts/wait_for_ready_buffer.sh - polls /obs/snapshot for readiness
+# scripts/generate_plan.sh - generates plan and captures PLAN_ID exactly once
+# scripts/run_burnin_24h.sh - updated to wait for readiness before starting stream
+# scripts/burnin_probe.sh - updated to filter by PLAN_ID when provided
+
+# Tests added
+# tests/test_readiness_gate.py - 4 tests for readiness gate functionality
+# tests/test_p0_regressions.py - updated test_stream_control_is_database_backed to use monkeypatch for threshold
 ```
 
 ## Release Candidate — harden-real-runtime

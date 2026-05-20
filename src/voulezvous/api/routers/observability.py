@@ -22,6 +22,7 @@ from voulezvous.models.tables import (
     StreamPlanItem,
 )
 from voulezvous.services.cleanup import disk_usage_spool
+from voulezvous.services.stream_control import calculate_ready_buffer
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/obs", tags=["observability"])
@@ -106,6 +107,10 @@ async def snapshot(db: AsyncSession = Depends(get_db)) -> dict:
         )
     ).scalar_one() or 0
 
+    # ready buffer calculation
+    ready_buffer = await calculate_ready_buffer(db)
+    ready_buffer_min = round(ready_buffer["ready_duration_sec"] / 60, 2)
+
     # active plan (most recent non-completed)
     active_plan = (
         await db.execute(
@@ -147,6 +152,10 @@ async def snapshot(db: AsyncSession = Depends(get_db)) -> dict:
 
     pipeline = {
         "queued_hours": round(int(queued_sec) / 3600, 2),
+        "ready_buffer_sec": ready_buffer["ready_duration_sec"],
+        "ready_buffer_min": ready_buffer_min,
+        "ready_items": ready_buffer["ready_items"],
+        "queued_items": ready_buffer["queued_items"],
         "disk": disk_usage_spool(),
         "plan": plan_block,
     }
