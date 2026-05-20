@@ -1,0 +1,130 @@
+name: Postgres Migration Smoke
+
+on:
+  push:
+    branches: [ main, harden-real-runtime, burnin-runtime-lab ]
+  pull_request:
+    branches: [ main, harden-real-runtime, burnin-runtime-lab ]
+  workflow_dispatch:
+
+jobs:
+  postgres-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: voulezvous
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -U postgres; then
+              echo "Postgres is ready"
+              break
+            fi
+            echo "Waiting for Postgres... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/voulezvous
+          DATABASE_URL_SYNC: postgresql://postgres:postgres@localhost:5432/voulezvous
+        run: uv run alembic upgrade head
+
+      - name: Verify expected tables exist
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/voulezvous
+          DATABASE_URL_SYNC: postgresql://postgres:postgres@localhost:5432/voulezvous
+        run: |
+          uv run python -c "
+          import asyncio
+          from sqlalchemy import text
+          from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+          
+          async def check_tables():
+              engine = create_async_engine('postgresql+asyncpg://postgres:postgres@localhost:5432/voulezvous')
+              async with engine.begin() as conn:
+                  result = await conn.execute(text(\"\"\"
+                      SELECT table_name 
+                      FROM information_schema.tables 
+                      WHERE table_schema = 'public' 
+                      ORDER BY table_name
+                  \"\"\"))
+                  tables = [row[0] for row in result]
+                  print(f'Tables found: {len(tables)}')
+                  for table in tables:
+                      print(f'  - {table}')
+                  
+                  # Verify core tables exist
+                  required_tables = [
+                      'stream_plans', 'stream_plan_items', 'library_assets', 
+                      'stream_control', 'stream_events', 'prep_jobs'
+                  ]
+                  missing = [t for t in required_tables if t not in tables]
+                  if missing:
+                      raise Exception(f'Missing required tables: {missing}')
+                  print('All core tables verified')
+              await engine.dispose()
+          
+          asyncio.run(check_tables())
+          "
+
+      - name: Verify acquisition tables exist
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/voulezvous
+          DATABASE_URL_SYNC: postgresql://postgres:postgres@localhost:5432/voulezvous
+        run: |
+          uv run python -c "
+          import asyncio
+          from sqlalchemy import text
+          from sqlalchemy.ext.asyncio import create_async_engine
+          
+          async def check_acquisition_tables():
+              engine = create_async_engine('postgresql+asyncpg://postgres:postgres@localhost:5432/voulezvous')
+              async with engine.begin() as conn:
+                  result = await conn.execute(text(\"\"\"
+                      SELECT table_name 
+                      FROM information_schema.tables 
+                      WHERE table_schema = 'public' 
+                      AND table_name IN (
+                          'discovery_runs', 'candidate_assets', 'retrieval_adapters',
+                          'domain_policies', 'search_keywords', 'lineup_runs', 'lineup_items',
+                          'media_ir_jobs', 'asset_enrichments', 'autonomy_reports'
+                      )
+                  \"\"\"))
+                  tables = [row[0] for row in result]
+                  print(f'Acquisition tables found: {len(tables)}')
+                  for table in tables:
+                      print(f'  - {table}')
+                  
+                  if len(tables) < 10:
+                      raise Exception(f'Expected 10 acquisition tables, found {len(tables)}')
+                  print('All acquisition tables verified')
+              await engine.dispose()
+          
+          asyncio.run(check_acquisition_tables())
+          "
