@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Burn-in probe script - collects timestamped system state samples
+# Reports are written to ./burnin_reports/burnin_YYYYMMDD.log (host directory, not /spool)
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 REPORT_DIR="./burnin_reports"
@@ -51,7 +53,7 @@ docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT * FROM str
 
 # last 20 stream_events
 echo "--- Last 20 Stream Events ---" >> "${REPORT_FILE}"
-docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT event_type, plan_id, plan_item_id, asset_id, occurred_at FROM stream_events ORDER BY occurred_at DESC LIMIT 20;" >> "${REPORT_FILE}" 2>&1
+docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT event_type, plan_id, plan_item_id, asset_id, occurred_at FROM stream_events ORDER BY occurred_at DESC LIMIT 20;" >> "${REPORT_FILE}" 2>&1 || echo "ERROR: Failed to query stream_events" >> "${REPORT_FILE}"
 
 # item_started/item_completed/item_failed counts
 echo "--- Stream Plan Item Status Counts ---" >> "${REPORT_FILE}"
