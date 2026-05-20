@@ -639,10 +639,70 @@ Video playing? true Current time: 44.959787
 # - Local admission: verified (ruff passes, 54 tests pass, compileall passes)
 ```
 
-**Phase 3**: ⚠️ PARTIAL
+**Phase 3**: ⏳ IN PROGRESS
+
+### Operation Safety contracts:
+- [ ] Missing prepared file produces item_failed event with reason
+- [ ] Corrupt media produces item_failed event with reason
+- [ ] Missing fallback is created or startup fails loudly
+- [x] HLS cleanup keeps segment count bounded (FAILED - see finding below)
+- [ ] Streamer restart resumes HLS output or enters explicit fallback
+- [ ] Queue exhaustion is visible as fallback_started or idle state
+- [ ] Health/snapshot endpoint exposes current stream state
+- [ ] Worker errors are logged structurally with item/plan ids where applicable
+- [x] No Director starts during core operation safety admission (verified)
+
+### Current state:
 - Restart safety: verified (streamer and director restart with item content verified)
 - Error handling: not verified
-- Cleanup: partially verified (prepared file cleanup working, old HLS segment cleanup not tested)
+- Cleanup: partially verified (prepared file cleanup working, HLS segment cleanup FAILED)
+
+### HLS Cleanup Finding (FAILED):
+```bash
+# Command: Start stream on lab-512 and monitor segment count
+ssh danvoulez@lab-512.local "curl -s -X POST http://localhost:8000/stream/start"
+
+# Output: Stream started
+{"status":"start_requested","desired_running":true}
+
+# Command: Wait 60s and check segment count
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose exec streamer sh -c "ls -la /spool/hls/*.ts 2>/dev/null | wc -l"'
+
+# Output: 28 segments accumulated (expected: ~13 with hls_list_size=10, hls_delete_threshold=3)
+28
+
+# Command: Check playlist content
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose exec streamer cat /spool/hls/stream.m3u8'
+
+# Output: Playlist correctly shows only 10 segments (EXT-X-MEDIA-SEQUENCE:20)
+#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-TARGETDURATION:8
+#EXT-X-MEDIA-SEQUENCE:20
+#EXT-X-INDEPENDENT-SEGMENTS
+...
+seg_00020.ts
+seg_00021.ts
+...
+seg_00029.ts
+
+# Command: Check all segment files on disk
+ssh danvoulez@lab-512.local 'cd ~/logline-tv && export DOCKER_HOST=unix:///Users/danvoulez/.colima/default/docker.sock && docker compose exec streamer sh -c "ls -la /spool/hls/*.ts"'
+
+# Output: 28 segments on disk (seg_00000.ts through seg_00027.ts)
+-rw-r--r-- 1 root root 127652 May 20 06:25 /spool/hls/seg_00000.ts
+-rw-r--r-- 1 root root  26884 May 20 06:25 /spool/hls/seg_00001.ts
+...
+-rw-r--r-- 1 root root  26884 May 20 06:28 /spool/hls/seg_00027.ts
+
+# Verification:
+# - Playlist management: WORKING (FFmpeg correctly maintains 10-segment sliding window)
+# - Segment file deletion: FAILED (FFmpeg delete_segments flag not working across process restarts)
+# - Root cause: FFmpeg's delete_segments flag only works reliably within a single continuous FFmpeg process.
+#   When streamer starts a new FFmpeg process for each video item, old segments from previous runs are not deleted.
+# - Impact: Disk space will accumulate over time, potentially causing disk fill in long-running deployments.
+# - Required fix: Add external cleanup logic (e.g., periodic cleanup job that deletes segments not in current playlist)
+```
 
 **Phase 4**: ⏳ PENDING
 - Director autonomy not tested
