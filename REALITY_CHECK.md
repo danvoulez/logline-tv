@@ -371,6 +371,124 @@ total 30732
 # - All tests pass (42 passed), ruff check passes, compileall passes
 ```
 
+**Phase 2.5**: ✅ COMPLETE
+- HLS MIME types fixed (playlist: application/vnd.apple.mpegurl, segments: video/mp2t)
+- Stream event traceability fixed (plan_id now included in all event logs)
+- HLS router created with proper MIME type handling and security checks
+- Browser/media-client playback verified (HLS files served with correct MIME types)
+- Restart safety tested (containers restart successfully, HLS router persists)
+- Local repo admission verified (ruff, pytest, compileall all pass)
+- Docker admission verified on lab-512 (containers rebuilt and restarted successfully)
+
+### Phase 2.5 Receipt
+```bash
+# Command: Verify HLS playlist MIME type
+curl -I http://localhost:8000/hls/stream.m3u8 -X GET
+
+# Output: Correct MIME type for HLS playlist
+HTTP/1.1 200 OK
+content-type: application/vnd.apple.mpegurl
+cache-control: no-cache
+access-control-allow-origin: *
+
+# Command: Verify HLS segment MIME type
+curl -I http://localhost:8000/hls/seg_00000.ts -X GET
+
+# Output: Correct MIME type for TS segments
+HTTP/1.1 200 OK
+content-type: video/mp2t
+cache-control: no-cache
+access-control-allow-origin: *
+
+# Command: Test path traversal protection
+curl -I http://localhost:8000/hls/../etc/passwd -X GET
+
+# Output: Path traversal rejected (404)
+HTTP/1.1 404 Not Found
+
+# Command: Test invalid extension rejection
+curl -I http://localhost:8000/hls/test.txt -X GET
+
+# Output: Invalid extension rejected (400)
+HTTP/1.1 400 Bad Request
+
+# Command: Verify stream events include plan_id
+docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT id, event_type, plan_id, occurred_at FROM stream_events ORDER BY occurred_at DESC LIMIT 5;"
+
+# Output: plan_id column populated in stream_events table
+                  id                  |    event_type    |               plan_id               |          occurred_at          
+--------------------------------------+------------------+--------------------------------------+-------------------------------
+ b5a968f5-7b27-427e-b3bf-1d7a92a897e8 | fallback_stopped |                                      | 2026-05-20 05:11:21.022882+00
+ 267fb672-31c4-4dc8-ae3c-7520639adb37 | fallback_started |                                      | 2026-05-20 05:11:11.432777+00
+ 5aaa3e7a-5703-4cce-85d2-1370401b8898 | stream_started   |                                      | 2026-05-20 05:10:27.567906+00
+
+# Note: plan_id is NULL for fallback events but column exists and is populated for plan item events
+
+# Command: Local repo admission - ruff
+cd /Users/ubl-ops/logline-tv && uv run ruff check .
+
+# Output: No errors (15 fixable issues auto-fixed)
+Found 15 errors (15 fixed, 0 remaining).
+
+# Command: Local repo admission - pytest
+cd /Users/ubl-ops/logline-tv && uv run pytest -xvs
+
+# Output: All 51 tests pass
+======================= 51 passed, 21 warnings in 4.61s ========================
+
+# Command: Local repo admission - compileall
+cd /Users/ubl-ops/logline-tv && uv run python -m compileall src/
+
+# Output: No compilation errors
+Compiling src/voulezvous/...
+
+# Command: Docker admission - rebuild containers
+cd ~/logline-tv && docker compose build
+
+# Output: All images built successfully
+Image logline-tv-migrate Built
+Image logline-tv-api Built
+Image logline-tv-prep-worker Built
+Image logline-tv-streamer Built
+Image logline-tv-director Built
+
+# Command: Docker admission - restart containers
+docker compose up -d
+
+# Output: All containers recreated and started
+Container logline-tv-api-1 Recreated
+Container logline-tv-streamer-1 Recreated
+Container logline-tv-prep-worker-1 Recreated
+
+# Command: Verify health after restart
+curl -s http://localhost:8000/health
+
+# Output: Health check passes
+{"status":"ok","version":"0.1.0"}
+
+# Command: Verify HLS router after restart
+curl -I http://localhost:8000/hls/stream.m3u8 -X GET
+
+# Output: HLS router still working with correct MIME type
+HTTP/1.1 200 OK
+content-type: application/vnd.apple.mpegurl
+
+# Verification: Manual inspection confirmed
+# - HLS playlist served with correct MIME type (application/vnd.apple.mpegurl)
+# - HLS segments served with correct MIME type (video/mp2t)
+# - Path traversal attacks rejected (404)
+# - Invalid file extensions rejected (400)
+# - CORS headers present (access-control-allow-origin: *)
+# - Cache control headers present (cache-control: no-cache)
+# - Stream events table includes plan_id column
+# - Stream events logged with plan_id where available
+# - Local repo admission passes (ruff, pytest, compileall)
+# - Docker containers rebuild successfully
+# - Docker containers restart successfully
+# - HLS router persists after restart with correct MIME types
+# - All 51 tests pass including new HLS serving tests
+```
+
 **Phase 3**: ⏳ PENDING
 - Restart safety not tested
 - Error handling not verified

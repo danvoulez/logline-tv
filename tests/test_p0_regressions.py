@@ -352,8 +352,9 @@ async def test_stream_event_includes_plan_id(db: AsyncSession):
     assert claimed.id == item.id
 
     # Check that an item_started event was logged with plan_id
-    from voulezvous.models.tables import StreamEvent
     from sqlalchemy import select
+
+    from voulezvous.models.tables import StreamEvent
 
     result = await db.execute(
         select(StreamEvent)

@@ -1,7 +1,5 @@
 """HLS serving router with correct MIME types."""
 
-import os
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
