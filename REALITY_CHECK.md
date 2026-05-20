@@ -1289,6 +1289,77 @@ ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew s
 # Verification: No library assets created
 ```
 
+## Phase 6 — 24h Burn-in
+
+Status:
+  failed
+
+Duration:
+  start: 2026-05-20T12:36:37Z
+  end: 2026-05-20T12:41:00Z (stopped after ~4 minutes)
+
+Restart performed:
+  No (burn-in failed before planned restart at hour 6)
+
+HLS availability:
+  playlist: HTTP 200, content-type application/vnd.apple.mpegurl
+  segments: HTTP 200, content-type video/mp2t
+
+Segment count range:
+  start: 2592
+  end: 2592 (stable)
+
+Spool disk start/end:
+  start: 200M /spool
+  end: 200M /spool (stable)
+
+Stream events:
+  item_started: 11
+  item_completed: 11
+  item_failed: 0
+  fallback_started: 7
+  fallback_stopped: 6
+
+Director absent:
+  Yes (verified via docker compose ps)
+
+acquisition absent:
+  Yes (verified via docker compose ps)
+
+Failure reason:
+  Prep queue exhaustion - only 11 ready/completed items out of 17269 queued for 24h plan
+  Streamer fell into continuous fallback mode because prep_worker could not keep up
+  Fallback replaced item playback for extended period without explicit recovery
+  Deterministic media (3 videos) insufficient for 24h streaming demand
+
+Root cause:
+  24h plan requires significantly more media diversity than 3 deterministic test videos
+  Prep_worker single-threaded processing cannot keep up with real-time streaming demand
+  No admission issue - system functions correctly but lacks content diversity for 24h operation
+
+Receipt:
+```bash
+# Prep depth at failure
+SELECT prep_status, stream_status, COUNT(*)
+FROM stream_plan_items
+GROUP BY prep_status, stream_status;
+# Result: ready/completed: 11, queued: 17269
+
+# Stream events at failure
+SELECT event_type, COUNT(*)
+FROM stream_events
+GROUP BY event_type;
+# Result: item_started: 11, item_completed: 11, fallback_started: 7, fallback_stopped: 6
+
+# Disk usage
+du -sh /spool
+# Result: 200M (stable, not growing unbounded)
+
+# HLS segment count
+ls /spool/hls/*.ts | wc -l
+# Result: 2592 (stable, bounded)
+```
+
 ## Release Candidate — harden-real-runtime
 
 Verified:
@@ -1307,7 +1378,8 @@ Verified:
 - promotion gates: Verified via local tests (metadata_only and unauthorized candidates rejected)
 
 Not production-ready:
-- no 24h burn-in
+- 24h burn-in failed (prep queue exhaustion with 3 deterministic videos)
+- insufficient media diversity for 24h operation
 - no production CDN
 - no viewer analytics
 - real external acquisition not validated
