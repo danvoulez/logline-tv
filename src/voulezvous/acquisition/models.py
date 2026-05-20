@@ -132,7 +132,7 @@ class CandidateAsset(Base, UUIDPrimaryKey, TimestampMixin):
         nullable=False,
     )
     retrieval_adapter_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("retrieval_adapters.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("retrieval_adapters.id", use_alter=True), nullable=True
     )
     rights_status: Mapped[CandidateRightsStatus] = mapped_column(
         Enum(CandidateRightsStatus, native_enum=False),
