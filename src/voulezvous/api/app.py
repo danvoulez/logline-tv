@@ -36,6 +36,7 @@ from voulezvous.acquisition.api import (
 from voulezvous.api.routers import (
     assets,
     health,
+    hls,
     plans,
     prep,
     reports,
@@ -110,9 +111,9 @@ _pkg_dir = Path(__file__).resolve().parent.parent
 app.mount("/static", StaticFiles(directory=str(_pkg_dir / "static")), name="static")
 templates = Jinja2Templates(directory=str(_pkg_dir / "templates"))
 
-# Mount HLS spool dir for live segment serving
+# HLS router with correct MIME types
 settings.ensure_spool_dirs()
-app.mount("/hls", StaticFiles(directory=str(settings.spool_hls)), name="hls")
+app.include_router(hls.router)
 
 # Existing MVP routers
 app.include_router(health.router)

@@ -287,3 +287,84 @@ async def test_bootstrap_creates_fallback_video():
             ), "Existing fallback should not be regenerated"
         finally:
             bootstrap_module.settings = original_settings
+
+
+@pytest.mark.asyncio
+async def test_stream_event_includes_plan_id(db: AsyncSession):
+    """Verify that stream events for item operations include plan_id."""
+    from datetime import date, datetime, timezone
+
+    from voulezvous.models.enums import (
+        AssetKind,
+        AssetStatus,
+        PlanStatus,
+        PrepStatus,
+        RightsStatus,
+        SourceType,
+        StreamItemStatus,
+    )
+    from voulezvous.models.tables import LibraryAsset, StreamPlan, StreamPlanItem
+    from voulezvous.services.streamer import _claim_next_ready_item
+
+    # Create asset
+    asset = LibraryAsset(
+        kind=AssetKind.video,
+        title="Test Asset",
+        source_type=SourceType.direct_url,
+        source_url="https://example.com/video.mp4",
+        duration_sec=10,
+        rights_status=RightsStatus.approved_for_stream,
+        status=AssetStatus.approved,
+    )
+    db.add(asset)
+
+    # Create plan
+    now = datetime.now(timezone.utc)
+    plan = StreamPlan(
+        plan_date=date(2026, 5, 20),
+        status=PlanStatus.ready,
+        target_start_at=now,
+        target_end_at=now,
+    )
+    db.add(plan)
+    await db.flush()
+
+    # Create plan item
+    item = StreamPlanItem(
+        stream_plan_id=plan.id,
+        video_asset_id=asset.id,
+        sequence_index=0,
+        planned_start_at=now,
+        planned_end_at=now,
+        target_duration_sec=10,
+        prep_status=PrepStatus.ready,
+        stream_status=StreamItemStatus.queued,
+        prepared_file_path="/spool/prepared/test.mp4",
+    )
+    db.add(item)
+    await db.commit()
+
+    # Claim the item
+    claimed = await _claim_next_ready_item(db)
+
+    # Verify item was claimed
+    assert claimed is not None
+    assert claimed.id == item.id
+
+    # Check that an item_started event was logged with plan_id
+    from voulezvous.models.tables import StreamEvent
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(StreamEvent)
+        .where(StreamEvent.event_type == "item_started")
+        .where(StreamEvent.plan_item_id == item.id)
+        .order_by(StreamEvent.occurred_at.desc())
+        .limit(1)
+    )
+    event = result.scalar_one_or_none()
+
+    assert event is not None, "item_started event should be logged"
+    assert event.plan_id == plan.id, "item_started event should include plan_id"
+    assert event.plan_item_id == item.id, "item_started event should include plan_item_id"
+    assert event.asset_id == asset.id, "item_started event should include asset_id"

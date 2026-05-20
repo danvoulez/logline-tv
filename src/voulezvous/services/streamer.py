@@ -109,7 +109,13 @@ async def _claim_next_ready_item(db: AsyncSession) -> StreamPlanItem | None:
     if plan and plan.status in (PlanStatus.preparing, PlanStatus.ready):
         plan.status = PlanStatus.streaming
     await db.commit()
-    await _log_event(db, EventType.item_started, plan_item_id=item.id, asset_id=item.video_asset_id)
+    await _log_event(
+        db,
+        EventType.item_started,
+        plan_id=plan.id if plan else None,
+        plan_item_id=item.id,
+        asset_id=item.video_asset_id,
+    )
     return item
 
 
@@ -126,7 +132,14 @@ async def _play_item(db: AsyncSession, item: StreamPlanItem) -> None:
         item.error_log = "Prepared file missing"
         item.actual_end_at = datetime.now(timezone.utc)
         await db.commit()
-        await _log_event(db, EventType.item_failed, plan_item_id=item.id)
+        plan = await db.get(StreamPlan, item.stream_plan_id)
+        await _log_event(
+            db,
+            EventType.item_failed,
+            plan_id=plan.id if plan else None,
+            plan_item_id=item.id,
+            asset_id=item.video_asset_id,
+        )
         await _record_play(db, item, status="skipped", error="Prepared file missing")
         return
 
@@ -139,7 +152,14 @@ async def _play_item(db: AsyncSession, item: StreamPlanItem) -> None:
         item.stream_status = StreamItemStatus.completed
         item.actual_end_at = datetime.now(timezone.utc)
         await db.commit()
-        await _log_event(db, EventType.item_completed, plan_item_id=item.id, asset_id=item.video_asset_id)
+        plan = await db.get(StreamPlan, item.stream_plan_id)
+        await _log_event(
+            db,
+            EventType.item_completed,
+            plan_id=plan.id if plan else None,
+            plan_item_id=item.id,
+            asset_id=item.video_asset_id,
+        )
 
         actual_sec = int((item.actual_end_at - started_at).total_seconds())
         await _record_play(db, item, status="ok", actual_sec=actual_sec)
@@ -153,7 +173,14 @@ async def _play_item(db: AsyncSession, item: StreamPlanItem) -> None:
         item.error_log = str(e)
         item.actual_end_at = datetime.now(timezone.utc)
         await db.commit()
-        await _log_event(db, EventType.item_failed, plan_item_id=item.id)
+        plan = await db.get(StreamPlan, item.stream_plan_id)
+        await _log_event(
+            db,
+            EventType.item_failed,
+            plan_id=plan.id if plan else None,
+            plan_item_id=item.id,
+            asset_id=item.video_asset_id,
+        )
         actual_sec = int((item.actual_end_at - started_at).total_seconds())
         await _record_play(db, item, status="failed", actual_sec=actual_sec, error=str(e))
 
@@ -229,6 +256,7 @@ async def _cleanup_item(db: AsyncSession, item: StreamPlanItem) -> None:
     if item.prepared_file_path:
         paths_to_delete.append(Path(item.prepared_file_path))
 
+    plan = await db.get(StreamPlan, item.stream_plan_id)
     for p in paths_to_delete:
         try:
             if p.exists():
@@ -237,6 +265,7 @@ async def _cleanup_item(db: AsyncSession, item: StreamPlanItem) -> None:
                 await _log_event(
                     db,
                     EventType.cleanup_deleted,
+                    plan_id=plan.id if plan else None,
                     plan_item_id=item.id,
                     asset_id=item.video_asset_id,
                 )
@@ -245,6 +274,7 @@ async def _cleanup_item(db: AsyncSession, item: StreamPlanItem) -> None:
             await _log_event(
                 db,
                 EventType.cleanup_failed,
+                plan_id=plan.id if plan else None,
                 plan_item_id=item.id,
                 asset_id=item.video_asset_id,
                 payload={"error": str(e)},
