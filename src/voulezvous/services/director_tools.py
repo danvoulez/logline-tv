@@ -10,12 +10,12 @@ Python directly. The Director loop validates and dispatches here.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from typing import Any
 
 import structlog
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voulezvous.acquisition.enums import (
@@ -130,9 +130,7 @@ async def tool_generate_plan(db: AsyncSession, args: GeneratePlanArgs) -> dict:
     ).scalar_one()
     queued_hours = (int(queued_sec or 0)) / 3600
     if queued_hours >= 4:
-        raise ToolError(
-            f"queue already has {queued_hours:.1f}h of content; skipping plan"
-        )
+        raise ToolError(f"queue already has {queued_hours:.1f}h of content; skipping plan")
 
     plan = await generate_plan(db, date.today(), hours=args.hours, mix_music=args.mix_music)
     # Auto-approve so prep worker pegs items
@@ -155,23 +153,15 @@ async def tool_run_discovery(db: AsyncSession, args: RunDiscoveryArgs) -> dict:
     if args.simulated:
         run = await run_discovery_simulated(db)
     else:
-        try:
-            run = await run_discovery(db)
-        except Exception as e:
-            logger.warning("director.discovery_fallback", error=str(e))
-            run = await run_discovery_simulated(db)
+        run = await run_discovery(db)
     return {
         "run_id": str(run.id),
         "summary": run.output_summary,
     }
 
 
-async def tool_run_user_discovery(
-    db: AsyncSession, args: RunUserDiscoveryArgs
-) -> dict:
-    run = await run_user_discovery(
-        db, domain=args.domain, username=args.username, max_videos=args.max_videos
-    )
+async def tool_run_user_discovery(db: AsyncSession, args: RunUserDiscoveryArgs) -> dict:
+    run = await run_user_discovery(db, domain=args.domain, username=args.username, max_videos=args.max_videos)
     return {
         "run_id": str(run.id),
         "domain": args.domain,
@@ -216,11 +206,7 @@ async def tool_block_asset(db: AsyncSession, args: BlockAssetArgs) -> dict:
 
 
 async def tool_add_keyword(db: AsyncSession, args: AddKeywordArgs) -> dict:
-    existing = (
-        await db.execute(
-            select(SearchKeyword).where(SearchKeyword.keyword == args.text)
-        )
-    ).scalar_one_or_none()
+    existing = (await db.execute(select(SearchKeyword).where(SearchKeyword.keyword == args.text))).scalar_one_or_none()
     if existing:
         # Reactivate if previously paused
         existing.active = True
@@ -331,9 +317,7 @@ Verbs and required args (strict — extra fields are rejected):
 """.strip()
 
 
-async def execute_action(
-    db: AsyncSession, verb: str, args_raw: dict
-) -> tuple[str, dict | None, str | None]:
+async def execute_action(db: AsyncSession, verb: str, args_raw: dict) -> tuple[str, dict | None, str | None]:
     """Validate + dispatch a single action.
 
     Returns (status, result, error). status ∈ {executed, rejected, failed}.

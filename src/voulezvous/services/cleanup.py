@@ -10,7 +10,6 @@ and are NOT referenced by any active row.
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 
 import structlog
 from sqlalchemy import select
@@ -29,13 +28,12 @@ async def cleanup_orphan_downloads(db: AsyncSession) -> dict:
         return {"scanned": 0, "deleted": 0, "freed_bytes": 0}
 
     referenced = {
-        str(p) for p in (
-            await db.execute(
-                select(LibraryAsset.current_local_path).where(
-                    LibraryAsset.current_local_path.isnot(None)
-                )
-            )
-        ).scalars().all()
+        str(p)
+        for p in (
+            await db.execute(select(LibraryAsset.current_local_path).where(LibraryAsset.current_local_path.isnot(None)))
+        )
+        .scalars()
+        .all()
     }
 
     scanned = 0
@@ -69,15 +67,16 @@ async def cleanup_orphan_prepared(db: AsyncSession) -> dict:
         active_statuses.append(StreamItemStatus.completed)
 
     referenced = {
-        str(p) for p in (
+        str(p)
+        for p in (
             await db.execute(
-                select(StreamPlanItem.prepared_file_path).where(
-                    StreamPlanItem.prepared_file_path.isnot(None)
-                ).where(
-                    StreamPlanItem.stream_status.in_(active_statuses)
-                )
+                select(StreamPlanItem.prepared_file_path)
+                .where(StreamPlanItem.prepared_file_path.isnot(None))
+                .where(StreamPlanItem.stream_status.in_(active_statuses))
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     }
 
     scanned = 0

@@ -51,21 +51,23 @@ async def run_discovery(db: AsyncSession, run_date: date | None = None) -> Disco
     await db.flush()
 
     # Load enabled domain policies
-    policies = (await db.execute(
-        select(DomainPolicy).where(DomainPolicy.is_enabled.is_(True))
-    )).scalars().all()
+    policies = (await db.execute(select(DomainPolicy).where(DomainPolicy.is_enabled.is_(True)))).scalars().all()
 
     # Load active include/exclude keywords
-    include_kws = (await db.execute(
-        select(SearchKeyword).where(
-            SearchKeyword.active.is_(True), SearchKeyword.include.is_(True)
+    include_kws = (
+        (await db.execute(select(SearchKeyword).where(SearchKeyword.active.is_(True), SearchKeyword.include.is_(True))))
+        .scalars()
+        .all()
+    )
+    exclude_kws = (
+        (
+            await db.execute(
+                select(SearchKeyword).where(SearchKeyword.active.is_(True), SearchKeyword.include.is_(False))
+            )
         )
-    )).scalars().all()
-    exclude_kws = (await db.execute(
-        select(SearchKeyword).where(
-            SearchKeyword.active.is_(True), SearchKeyword.include.is_(False)
-        )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     exclude_terms = {kw.keyword.lower() for kw in exclude_kws}
     include_terms = sorted(
@@ -127,11 +129,9 @@ async def run_discovery(db: AsyncSession, run_date: date | None = None) -> Disco
                         continue
 
                     # Dedup check
-                    existing = (await db.execute(
-                        select(CandidateAsset).where(
-                            CandidateAsset.page_url == href
-                        )
-                    )).scalar_one_or_none()
+                    existing = (
+                        await db.execute(select(CandidateAsset).where(CandidateAsset.page_url == href))
+                    ).scalar_one_or_none()
                     if existing:
                         continue
 
@@ -165,9 +165,7 @@ async def run_discovery(db: AsyncSession, run_date: date | None = None) -> Disco
                             source_url = v["src"]
                             break
 
-                    has_retrieval, retrieval_type = adapter.classify_retrieval(
-                        source_url, media_info
-                    )
+                    has_retrieval, retrieval_type = adapter.classify_retrieval(source_url, media_info)
 
                     # Determine quality
                     quality_signals = {
@@ -245,20 +243,22 @@ async def run_discovery_simulated(db: AsyncSession, run_date: date | None = None
     db.add(run)
     await db.flush()
 
-    policies = (await db.execute(
-        select(DomainPolicy).where(DomainPolicy.is_enabled.is_(True))
-    )).scalars().all()
+    policies = (await db.execute(select(DomainPolicy).where(DomainPolicy.is_enabled.is_(True)))).scalars().all()
 
-    include_kws = (await db.execute(
-        select(SearchKeyword).where(
-            SearchKeyword.active.is_(True), SearchKeyword.include.is_(True)
+    include_kws = (
+        (await db.execute(select(SearchKeyword).where(SearchKeyword.active.is_(True), SearchKeyword.include.is_(True))))
+        .scalars()
+        .all()
+    )
+    exclude_kws = (
+        (
+            await db.execute(
+                select(SearchKeyword).where(SearchKeyword.active.is_(True), SearchKeyword.include.is_(False))
+            )
         )
-    )).scalars().all()
-    exclude_kws = (await db.execute(
-        select(SearchKeyword).where(
-            SearchKeyword.active.is_(True), SearchKeyword.include.is_(False)
-        )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     exclude_terms = {kw.keyword.lower() for kw in exclude_kws}
 
@@ -284,23 +284,19 @@ async def run_discovery_simulated(db: AsyncSession, run_date: date | None = None
 
             # Dedup
             dedup_url = f"https://{policy.domain}/video/{kw.keyword.replace(' ', '-')}"
-            existing = (await db.execute(
-                select(CandidateAsset).where(CandidateAsset.page_url == dedup_url)
-            )).scalar_one_or_none()
+            existing = (
+                await db.execute(select(CandidateAsset).where(CandidateAsset.page_url == dedup_url))
+            ).scalar_one_or_none()
             if existing:
                 continue
 
             # Simulate candidate based on domain type
             is_archive = "archive.org" in policy.domain
             source_url = (
-                f"https://{policy.domain}/download/{kw.keyword.replace(' ', '_')}/video.mp4"
-                if is_archive
-                else None
+                f"https://{policy.domain}/download/{kw.keyword.replace(' ', '_')}/video.mp4" if is_archive else None
             )
 
-            has_retrieval, retrieval_type = adapter.classify_retrieval(
-                source_url, {}
-            )
+            has_retrieval, retrieval_type = adapter.classify_retrieval(source_url, {})
 
             candidate = CandidateAsset(
                 discovery_run_id=run.id,

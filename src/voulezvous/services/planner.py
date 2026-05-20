@@ -27,11 +27,7 @@ async def generate_plan(
         select(LibraryAsset)
         .where(LibraryAsset.kind == AssetKind.video)
         .where(LibraryAsset.rights_status == RightsStatus.approved_for_stream)
-        .where(
-            LibraryAsset.status.in_(
-                [AssetStatus.approved, AssetStatus.downloaded, AssetStatus.prepared]
-            )
-        )
+        .where(LibraryAsset.status.in_([AssetStatus.approved, AssetStatus.downloaded, AssetStatus.prepared]))
     )
     result = await db.execute(q_video)
     video_assets = list(result.scalars().all())
@@ -46,11 +42,7 @@ async def generate_plan(
             select(LibraryAsset)
             .where(LibraryAsset.kind == AssetKind.music)
             .where(LibraryAsset.rights_status == RightsStatus.approved_for_stream)
-            .where(
-                LibraryAsset.status.in_(
-                    [AssetStatus.approved, AssetStatus.downloaded, AssetStatus.prepared]
-                )
-            )
+            .where(LibraryAsset.status.in_([AssetStatus.approved, AssetStatus.downloaded, AssetStatus.prepared]))
         )
         result = await db.execute(q_music)
         music_assets = list(result.scalars().all())
@@ -60,18 +52,12 @@ async def generate_plan(
         select(LibraryAsset)
         .where(LibraryAsset.kind == AssetKind.bumper)
         .where(LibraryAsset.rights_status == RightsStatus.approved_for_stream)
-        .where(
-            LibraryAsset.status.in_(
-                [AssetStatus.approved, AssetStatus.downloaded, AssetStatus.prepared]
-            )
-        )
+        .where(LibraryAsset.status.in_([AssetStatus.approved, AssetStatus.downloaded, AssetStatus.prepared]))
     )
     result = await db.execute(q_bumper)
     bumper_assets = list(result.scalars().all())
 
-    start_dt = datetime(
-        plan_date.year, plan_date.month, plan_date.day, tzinfo=timezone.utc
-    )
+    start_dt = datetime(plan_date.year, plan_date.month, plan_date.day, tzinfo=timezone.utc)
     end_dt = start_dt + timedelta(hours=hours)
 
     plan = StreamPlan(
@@ -167,11 +153,7 @@ async def generate_plan(
     await db.commit()
 
     # Reload with items
-    q = (
-        select(StreamPlan)
-        .where(StreamPlan.id == plan.id)
-        .options(selectinload(StreamPlan.items))
-    )
+    q = select(StreamPlan).where(StreamPlan.id == plan.id).options(selectinload(StreamPlan.items))
     result = await db.execute(q)
     plan = result.scalar_one()
 

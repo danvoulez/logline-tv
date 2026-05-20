@@ -15,9 +15,7 @@ router = APIRouter(prefix="/domain-policies", tags=["domain-policies"])
 
 @router.post("", response_model=DomainPolicyOut, status_code=201)
 async def create_domain_policy(body: DomainPolicyCreate, db: AsyncSession = Depends(get_db)):
-    existing = (await db.execute(
-        select(DomainPolicy).where(DomainPolicy.domain == body.domain)
-    )).scalar_one_or_none()
+    existing = (await db.execute(select(DomainPolicy).where(DomainPolicy.domain == body.domain))).scalar_one_or_none()
     if existing:
         raise HTTPException(400, f"Domain policy for {body.domain} already exists")
 
@@ -36,21 +34,15 @@ async def list_domain_policies(db: AsyncSession = Depends(get_db)):
 
 @router.get("/{policy_id}", response_model=DomainPolicyOut)
 async def get_domain_policy(policy_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    policy = (await db.execute(
-        select(DomainPolicy).where(DomainPolicy.id == policy_id)
-    )).scalar_one_or_none()
+    policy = (await db.execute(select(DomainPolicy).where(DomainPolicy.id == policy_id))).scalar_one_or_none()
     if not policy:
         raise HTTPException(404, "Domain policy not found")
     return policy
 
 
 @router.patch("/{policy_id}", response_model=DomainPolicyOut)
-async def update_domain_policy(
-    policy_id: uuid.UUID, body: DomainPolicyUpdate, db: AsyncSession = Depends(get_db)
-):
-    policy = (await db.execute(
-        select(DomainPolicy).where(DomainPolicy.id == policy_id)
-    )).scalar_one_or_none()
+async def update_domain_policy(policy_id: uuid.UUID, body: DomainPolicyUpdate, db: AsyncSession = Depends(get_db)):
+    policy = (await db.execute(select(DomainPolicy).where(DomainPolicy.id == policy_id))).scalar_one_or_none()
     if not policy:
         raise HTTPException(404, "Domain policy not found")
 
@@ -63,12 +55,8 @@ async def update_domain_policy(
 
 
 @router.delete("/{policy_id}", status_code=204)
-async def delete_domain_policy(
-    policy_id: uuid.UUID, db: AsyncSession = Depends(get_db)
-):
-    policy = (await db.execute(
-        select(DomainPolicy).where(DomainPolicy.id == policy_id)
-    )).scalar_one_or_none()
+async def delete_domain_policy(policy_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    policy = (await db.execute(select(DomainPolicy).where(DomainPolicy.id == policy_id))).scalar_one_or_none()
     if not policy:
         raise HTTPException(404, "Domain policy not found")
 

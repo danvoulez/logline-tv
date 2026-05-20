@@ -5,9 +5,6 @@ from __future__ import annotations
 import uuid
 
 from fastmcp import FastMCP
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
-from voulezvous.config import settings
 from sqlalchemy import desc, select
 
 from voulezvous.acquisition.models import DomainPolicy, SearchKeyword
@@ -20,9 +17,7 @@ from voulezvous.services.director_tools import (
     DomainIdArgs,
     GeneratePlanArgs,
     KeywordIdArgs,
-    NoArgs,
     RunDiscoveryArgs,
-    execute_action,
     tool_add_keyword,
     tool_boost_keyword,
     tool_disable_domain,
@@ -36,7 +31,8 @@ mcp = FastMCP(
     instructions=(
         "You are managing voulezvous.tv, an autonomous 24/7 streaming TV channel. "
         "Use get_tv_status first to understand the current state before taking any action. "
-        "The Director loop runs every 5 minutes automatically — only force a tick if something needs immediate attention. "
+        "The Director loop runs every 5 minutes automatically — only force a tick "
+        "if something needs immediate attention. "
         "Keywords drive discovery. Sites are where the Director scrapes content."
     ),
 )
@@ -71,6 +67,7 @@ async def force_director_tick() -> dict:
     """Force the Director to evaluate the system right now and take up to 5 actions.
     Returns how many actions were executed, rejected, or failed."""
     from voulezvous.services.director import director_tick
+
     return await director_tick()
 
 
@@ -78,12 +75,13 @@ async def force_director_tick() -> dict:
 async def get_recent_decisions(limit: int = 30) -> list:
     """Last N Director decisions with verb, reason, and status (executed/rejected/failed)."""
     from voulezvous.models.tables import DirectorAction
+
     async with async_session() as db:
         rows = (
-            await db.execute(
-                select(DirectorAction).order_by(desc(DirectorAction.created_at)).limit(limit)
-            )
-        ).scalars().all()
+            (await db.execute(select(DirectorAction).order_by(desc(DirectorAction.created_at)).limit(limit)))
+            .scalars()
+            .all()
+        )
     return [
         {
             "at": str(a.created_at),
@@ -206,6 +204,7 @@ async def run_discovery(simulated: bool = False) -> dict:
 async def block_asset(asset_id: str, reason: str = "blocked via MCP") -> dict:
     """Block a library asset so it's never streamed again. Pass the asset UUID."""
     from voulezvous.services.director_tools import tool_block_asset
+
     async with async_session() as db:
         result = await tool_block_asset(db, BlockAssetArgs(asset_id=uuid.UUID(asset_id), reason=reason))
     return result
@@ -226,6 +225,7 @@ async def run_cleanup() -> dict:
     Returns bytes freed in each spool directory."""
     async with async_session() as db:
         from voulezvous.services.cleanup import run_cleanup_cycle
+
         result = await run_cleanup_cycle(db)
     return result
 
@@ -234,17 +234,25 @@ async def run_cleanup() -> dict:
 async def get_stuck_prep_items() -> list:
     """List plan items stuck in prep_status=failed. These won't auto-retry.
     Returns item IDs, asset titles, and error logs."""
+    from sqlalchemy.orm import selectinload
+
     from voulezvous.models.enums import PrepStatus
     from voulezvous.models.tables import StreamPlanItem
-    from sqlalchemy.orm import selectinload
+
     async with async_session() as db:
-        rows = (await db.execute(
-            select(StreamPlanItem)
-            .where(StreamPlanItem.prep_status == PrepStatus.failed)
-            .options(selectinload(StreamPlanItem.video_asset))
-            .order_by(StreamPlanItem.created_at.desc())
-            .limit(20)
-        )).scalars().all()
+        rows = (
+            (
+                await db.execute(
+                    select(StreamPlanItem)
+                    .where(StreamPlanItem.prep_status == PrepStatus.failed)
+                    .options(selectinload(StreamPlanItem.video_asset))
+                    .order_by(StreamPlanItem.created_at.desc())
+                    .limit(20)
+                )
+            )
+            .scalars()
+            .all()
+        )
     return [
         {
             "item_id": str(r.id),

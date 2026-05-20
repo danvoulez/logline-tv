@@ -43,94 +43,67 @@ async def generate_report(db: AsyncSession, report_date: date | None = None) -> 
     report_date = report_date or date.today()
 
     # Discovery stats
-    discovery_runs = (await db.execute(
-        select(DiscoveryRun).where(DiscoveryRun.run_date == report_date)
-    )).scalars().all()
+    discovery_runs = (
+        (await db.execute(select(DiscoveryRun).where(DiscoveryRun.run_date == report_date))).scalars().all()
+    )
 
     total_found = sum(r.output_summary.get("total_found", 0) for r in discovery_runs)
     total_accepted = sum(r.output_summary.get("total_accepted", 0) for r in discovery_runs)
-    total_metadata_only = sum(
-        r.output_summary.get("total_metadata_only", 0) for r in discovery_runs
-    )
+    total_metadata_only = sum(r.output_summary.get("total_metadata_only", 0) for r in discovery_runs)
 
     # Candidate stats
     all_candidates = (await db.execute(select(CandidateAsset))).scalars().all()
-    approved_count = sum(
-        1 for c in all_candidates
-        if c.rights_status == CandidateRightsStatus.approved_for_stream
-    )
-    blocked_count = sum(
-        1 for c in all_candidates
-        if c.rights_status == CandidateRightsStatus.blocked
-    )
-    metadata_only_count = sum(
-        1 for c in all_candidates
-        if c.retrieval_status == RetrievalStatus.metadata_only
-    )
+    approved_count = sum(1 for c in all_candidates if c.rights_status == CandidateRightsStatus.approved_for_stream)
+    blocked_count = sum(1 for c in all_candidates if c.rights_status == CandidateRightsStatus.blocked)
+    metadata_only_count = sum(1 for c in all_candidates if c.retrieval_status == RetrievalStatus.metadata_only)
 
     # Lineup stats
-    lineups = (await db.execute(
-        select(LineupRun).where(LineupRun.lineup_date == report_date)
-    )).scalars().all()
+    lineups = (await db.execute(select(LineupRun).where(LineupRun.lineup_date == report_date))).scalars().all()
 
     lineup_items_total = 0
     buffer_count = 0
     fallback_count = 0
     for lineup in lineups:
-        items = (await db.execute(
-            select(LineupItem).where(LineupItem.lineup_run_id == lineup.id)
-        )).scalars().all()
+        items = (await db.execute(select(LineupItem).where(LineupItem.lineup_run_id == lineup.id))).scalars().all()
         lineup_items_total += len(items)
         buffer_count += sum(1 for i in items if i.slot_type == SlotType.buffer)
         fallback_count += sum(1 for i in items if i.slot_type == SlotType.fallback_reserve)
 
     # Media IR stats
-    ir_compiled = (await db.execute(
-        select(func.count(MediaIRJob.id)).where(MediaIRJob.status == MediaIRStatus.compiled)
-    )).scalar() or 0
-    ir_failed = (await db.execute(
-        select(func.count(MediaIRJob.id)).where(MediaIRJob.status == MediaIRStatus.failed)
-    )).scalar() or 0
+    ir_compiled = (
+        await db.execute(select(func.count(MediaIRJob.id)).where(MediaIRJob.status == MediaIRStatus.compiled))
+    ).scalar() or 0
+    ir_failed = (
+        await db.execute(select(func.count(MediaIRJob.id)).where(MediaIRJob.status == MediaIRStatus.failed))
+    ).scalar() or 0
 
     # Domain health
-    domains = (await db.execute(
-        select(DomainPolicy).where(DomainPolicy.is_enabled.is_(True))
-    )).scalars().all()
+    domains = (await db.execute(select(DomainPolicy).where(DomainPolicy.is_enabled.is_(True)))).scalars().all()
     domain_stats = []
     for d in domains:
         d_candidates = [c for c in all_candidates if c.domain_policy_id == d.id]
-        domain_stats.append({
-            "domain": d.domain,
-            "total_candidates": len(d_candidates),
-            "accepted": sum(
-                1 for c in d_candidates
-                if c.discovery_status == DiscoveryStatus.accepted
-            ),
-            "metadata_only": sum(
-                1 for c in d_candidates
-                if c.retrieval_status == RetrievalStatus.metadata_only
-            ),
-        })
+        domain_stats.append(
+            {
+                "domain": d.domain,
+                "total_candidates": len(d_candidates),
+                "accepted": sum(1 for c in d_candidates if c.discovery_status == DiscoveryStatus.accepted),
+                "metadata_only": sum(1 for c in d_candidates if c.retrieval_status == RetrievalStatus.metadata_only),
+            }
+        )
 
     # Keyword effectiveness
-    keywords = (await db.execute(
-        select(SearchKeyword).where(SearchKeyword.active.is_(True))
-    )).scalars().all()
+    keywords = (await db.execute(select(SearchKeyword).where(SearchKeyword.active.is_(True)))).scalars().all()
     keyword_stats = []
     for kw in keywords:
-        kw_candidates = [
-            c for c in all_candidates
-            if isinstance(c.tags, list) and kw.keyword in c.tags
-        ]
-        keyword_stats.append({
-            "keyword": kw.keyword,
-            "weight": float(kw.weight),
-            "candidates_found": len(kw_candidates),
-            "accepted": sum(
-                1 for c in kw_candidates
-                if c.discovery_status == DiscoveryStatus.accepted
-            ),
-        })
+        kw_candidates = [c for c in all_candidates if isinstance(c.tags, list) and kw.keyword in c.tags]
+        keyword_stats.append(
+            {
+                "keyword": kw.keyword,
+                "weight": float(kw.weight),
+                "candidates_found": len(kw_candidates),
+                "accepted": sum(1 for c in kw_candidates if c.discovery_status == DiscoveryStatus.accepted),
+            }
+        )
 
     # Duration distribution
     durations = [c.duration_sec for c in all_candidates if c.duration_sec]
@@ -147,8 +120,7 @@ async def generate_report(db: AsyncSession, report_date: date | None = None) -> 
         suggestions.append("No new content found. Consider expanding keywords or adding domains.")
     if metadata_only_count > approved_count:
         suggestions.append(
-            "More metadata-only assets than downloadable. "
-            "Consider adding domains with direct download support."
+            "More metadata-only assets than downloadable. Consider adding domains with direct download support."
         )
     if buffer_count > lineup_items_total * 0.3 and lineup_items_total > 0:
         suggestions.append("High buffer ratio. More approved content needed to fill lineup.")
@@ -217,13 +189,16 @@ async def generate_report(db: AsyncSession, report_date: date | None = None) -> 
         "## Domain Health",
     ]
     for ds in domain_stats:
-        md_lines.append(f"- **{ds['domain']}**: {ds['total_candidates']} candidates, "
-                        f"{ds['accepted']} accepted, {ds['metadata_only']} metadata-only")
+        md_lines.append(
+            f"- **{ds['domain']}**: {ds['total_candidates']} candidates, "
+            f"{ds['accepted']} accepted, {ds['metadata_only']} metadata-only"
+        )
 
     md_lines.extend(["", "## Keyword Effectiveness"])
     for ks in keyword_stats:
-        md_lines.append(f"- **{ks['keyword']}** (w={ks['weight']}): "
-                        f"{ks['candidates_found']} found, {ks['accepted']} accepted")
+        md_lines.append(
+            f"- **{ks['keyword']}** (w={ks['weight']}): {ks['candidates_found']} found, {ks['accepted']} accepted"
+        )
 
     md_lines.extend(["", "## Duration Distribution"])
     for bucket, count in duration_buckets.items():
@@ -237,9 +212,9 @@ async def generate_report(db: AsyncSession, report_date: date | None = None) -> 
     markdown_text = "\n".join(md_lines)
 
     # Upsert: update existing report for this date instead of duplicating
-    existing = (await db.execute(
-        select(AutonomyReport).where(AutonomyReport.report_date == report_date)
-    )).scalar_one_or_none()
+    existing = (
+        await db.execute(select(AutonomyReport).where(AutonomyReport.report_date == report_date))
+    ).scalar_one_or_none()
 
     if existing:
         existing.summary = summary

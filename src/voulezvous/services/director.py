@@ -22,7 +22,6 @@ from datetime import datetime, timezone
 
 import httpx
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voulezvous.config import settings
@@ -32,11 +31,11 @@ from voulezvous.models.tables import DirectorAction, DirectorRun
 from voulezvous.services.director_state import compact_state
 from voulezvous.services.director_tools import (
     GeneratePlanArgs,
+    NoArgs,
     execute_action,
     get_tool_grammar_description,
     tool_generate_plan,
     tool_start_stream,
-    NoArgs,
 )
 
 logger = structlog.get_logger()
@@ -154,6 +153,7 @@ async def _fallback_ensure_stream(db: AsyncSession, state: dict) -> None:
             from voulezvous.services.stream_control import (
                 get_or_create_stream_control,
             )
+
             control = await get_or_create_stream_control(db)
             # Toggling desired_running causes the streamer to restart its inner loop
             control.desired_running = False

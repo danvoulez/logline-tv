@@ -12,9 +12,7 @@ logger = structlog.get_logger()
 async def run_ffmpeg(args: list[str]) -> tuple[int, str, str]:
     cmd = [settings.ffmpeg_path, "-loglevel", "warning"] + args
     logger.info("ffmpeg_run", cmd=" ".join(cmd))
-    proc = await asyncio.create_subprocess_exec(
-        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
+    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     stdout, stderr = await proc.communicate()
     return proc.returncode or 0, stdout.decode(), stderr.decode()
 
@@ -23,15 +21,20 @@ async def normalize_video(input_path: Path, output_path: Path) -> Path:
     w, h = settings.house_resolution.split("x")
     args = [
         "-y",
-        "-i", str(input_path),
-        "-c:v", settings.house_video_codec,
-        "-c:a", settings.house_audio_codec,
-        "-r", str(settings.house_frame_rate),
-        "-ar", str(settings.house_audio_sample_rate),
+        "-i",
+        str(input_path),
+        "-c:v",
+        settings.house_video_codec,
+        "-c:a",
+        settings.house_audio_codec,
+        "-r",
+        str(settings.house_frame_rate),
+        "-ar",
+        str(settings.house_audio_sample_rate),
         "-vf",
-        f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2",
-        "-movflags", "+faststart",
+        f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2",
+        "-movflags",
+        "+faststart",
         str(output_path),
     ]
     rc, _, stderr = await run_ffmpeg(args)
@@ -49,16 +52,25 @@ async def mix_audio(
 ) -> Path:
     args = [
         "-y",
-        "-i", str(video_path),
-        "-stream_loop", "-1", "-i", str(music_path),
+        "-i",
+        str(video_path),
+        "-stream_loop",
+        "-1",
+        "-i",
+        str(music_path),
         "-filter_complex",
         f"[0:a]volume={video_gain}[va];[1:a]volume={music_gain}[ma];"
         f"[va][ma]amix=inputs=2:duration=first:dropout_transition=2[aout]",
-        "-map", "0:v",
-        "-map", "[aout]",
-        "-c:v", "copy",
-        "-c:a", settings.house_audio_codec,
-        "-ar", str(settings.house_audio_sample_rate),
+        "-map",
+        "0:v",
+        "-map",
+        "[aout]",
+        "-c:v",
+        "copy",
+        "-c:a",
+        settings.house_audio_codec,
+        "-ar",
+        str(settings.house_audio_sample_rate),
         "-shortest",
         str(output_path),
     ]
@@ -82,9 +94,12 @@ async def stream_to_target(input_path: Path, target: str) -> tuple[int, str]:
     else:
         args = [
             "-re",
-            "-i", str(input_path),
-            "-c", "copy",
-            "-f", "flv",
+            "-i",
+            str(input_path),
+            "-c",
+            "copy",
+            "-f",
+            "flv",
             target,
         ]
 
@@ -107,15 +122,24 @@ async def stream_to_hls_once(input_path: Path) -> tuple[int, str]:
 
     args = [
         "-re",
-        "-i", str(input_path),
-        "-c:v", "copy",
-        "-c:a", "copy",
-        "-f", "hls",
-        "-hls_time", str(settings.hls_segment_duration),
-        "-hls_list_size", str(settings.hls_playlist_size),
-        "-hls_flags", "delete_segments+append_list+omit_endlist+program_date_time+independent_segments+discont_start",
-        "-hls_delete_threshold", "3",
-        "-hls_segment_filename", str(hls_dir / "seg_%05d.ts"),
+        "-i",
+        str(input_path),
+        "-c:v",
+        "copy",
+        "-c:a",
+        "copy",
+        "-f",
+        "hls",
+        "-hls_time",
+        str(settings.hls_segment_duration),
+        "-hls_list_size",
+        str(settings.hls_playlist_size),
+        "-hls_flags",
+        "delete_segments+append_list+omit_endlist+program_date_time+independent_segments+discont_start",
+        "-hls_delete_threshold",
+        "3",
+        "-hls_segment_filename",
+        str(hls_dir / "seg_%05d.ts"),
         str(playlist),
     ]
     rc, _, stderr = await run_ffmpeg(args)

@@ -26,11 +26,7 @@ async def list_plans(
     db: AsyncSession = Depends(get_db),
 ):
     """List recent plans (no items) with a count summary per status."""
-    rows = (
-        await db.execute(
-            select(StreamPlan).order_by(desc(StreamPlan.created_at)).limit(limit)
-        )
-    ).scalars().all()
+    rows = (await db.execute(select(StreamPlan).order_by(desc(StreamPlan.created_at)).limit(limit))).scalars().all()
 
     plan_ids = [r.id for r in rows]
     # Aggregate item counts per plan
@@ -41,17 +37,16 @@ async def list_plans(
                 select(
                     StreamPlanItem.stream_plan_id,
                     func.count(StreamPlanItem.id).label("total"),
-                    func.sum(
-                        (StreamPlanItem.prep_status == PrepStatus.ready).cast(sa_int_type())
-                    ).label("ready"),
-                    func.sum(
-                        (StreamPlanItem.stream_status == StreamItemStatus.queued).cast(sa_int_type())
-                    ).label("queued"),
-                    func.sum(
-                        (StreamPlanItem.stream_status == StreamItemStatus.completed).cast(sa_int_type())
-                    ).label("completed"),
+                    func.sum((StreamPlanItem.prep_status == PrepStatus.ready).cast(sa_int_type())).label("ready"),
+                    func.sum((StreamPlanItem.stream_status == StreamItemStatus.queued).cast(sa_int_type())).label(
+                        "queued"
+                    ),
+                    func.sum((StreamPlanItem.stream_status == StreamItemStatus.completed).cast(sa_int_type())).label(
+                        "completed"
+                    ),
                     func.coalesce(func.sum(StreamPlanItem.target_duration_sec), 0).label("dur"),
-                ).where(StreamPlanItem.stream_plan_id.in_(plan_ids))
+                )
+                .where(StreamPlanItem.stream_plan_id.in_(plan_ids))
                 .group_by(StreamPlanItem.stream_plan_id)
             )
         ).all()
@@ -73,10 +68,16 @@ async def list_plans(
             "target_end_at": p.target_end_at.isoformat() if p.target_end_at else None,
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "notes": p.notes,
-            **(summaries.get(p.id) or {
-                "items_total": 0, "items_ready": 0, "items_queued": 0,
-                "items_completed": 0, "total_duration_sec": 0,
-            }),
+            **(
+                summaries.get(p.id)
+                or {
+                    "items_total": 0,
+                    "items_ready": 0,
+                    "items_queued": 0,
+                    "items_completed": 0,
+                    "total_duration_sec": 0,
+                }
+            ),
         }
         for p in rows
     ]
@@ -85,6 +86,7 @@ async def list_plans(
 def sa_int_type():
     """Cast helper for boolean → int aggregation in Postgres."""
     from sqlalchemy import Integer
+
     return Integer
 
 

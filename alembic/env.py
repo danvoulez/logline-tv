@@ -1,18 +1,9 @@
 import os
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import create_engine
 
-from voulezvous.models.base import Base
-from voulezvous.models.tables import (  # noqa: F401 – ensure tables are registered
-    DailyReport,
-    LibraryAsset,
-    PrepJob,
-    StreamEvent,
-    StreamPlan,
-    StreamPlanItem,
-)
+from alembic import context
 from voulezvous.acquisition.models import (  # noqa: F401 – register acquisition tables
     AssetEnrichment,
     AutonomyReport,
@@ -24,6 +15,15 @@ from voulezvous.acquisition.models import (  # noqa: F401 – register acquisiti
     MediaIRJob,
     RetrievalAdapter,
     SearchKeyword,
+)
+from voulezvous.models.base import Base
+from voulezvous.models.tables import (  # noqa: F401 – ensure tables are registered
+    DailyReport,
+    LibraryAsset,
+    PrepJob,
+    StreamEvent,
+    StreamPlan,
+    StreamPlanItem,
 )
 
 config = context.config

@@ -63,9 +63,7 @@ async def get_asset(asset_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{asset_id}", response_model=AssetOut)
-async def update_asset(
-    asset_id: uuid.UUID, body: AssetUpdate, db: AsyncSession = Depends(get_db)
-):
+async def update_asset(asset_id: uuid.UUID, body: AssetUpdate, db: AsyncSession = Depends(get_db)):
     asset = await db.get(LibraryAsset, asset_id)
     if not asset:
         raise HTTPException(404, "Asset not found")

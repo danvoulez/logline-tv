@@ -177,10 +177,7 @@ class BrowserRuntime:
             return {
                 "playback_works": state.get("playing", False),
                 "duration_sec": int(state.get("duration", 0)) if state.get("duration") else None,
-                "resolution": (
-                    f"{state.get('width', 0)}x{state.get('height', 0)}"
-                    if state.get("width") else None
-                ),
+                "resolution": (f"{state.get('width', 0)}x{state.get('height', 0)}" if state.get("width") else None),
             }
         except Exception as e:
             logger.warning("playback_check_failed", error=str(e))
@@ -191,9 +188,7 @@ class BrowserRuntime:
         if not self._page:
             return ""
         try:
-            text = await self._page.evaluate(
-                "() => document.body?.innerText?.slice(0, arguments[0] || 5000) || ''"
-            )
+            text = await self._page.evaluate("() => document.body?.innerText?.slice(0, arguments[0] || 5000) || ''")
             return text[:max_length]
         except Exception:
             return ""
@@ -304,9 +299,15 @@ class BrowserRuntime:
             return None
 
         download_selectors = [
-            "a.download-btn", "a[download]", "a[href*='download']",
-            "button.download", ".download-link a", "a[id*='download']",
-            "a[class*='download']", ".dl-btn", "a.btn-download",
+            "a.download-btn",
+            "a[download]",
+            "a[href*='download']",
+            "button.download",
+            ".download-link a",
+            "a[id*='download']",
+            "a[class*='download']",
+            ".dl-btn",
+            "a.btn-download",
         ]
 
         for selector in download_selectors:
@@ -314,9 +315,7 @@ class BrowserRuntime:
                 el = await self._page.query_selector(selector)
                 if el:
                     href = await el.get_attribute("href")
-                    if href and any(
-                        href.lower().endswith(ext) for ext in (".mp4", ".webm", ".flv")
-                    ):
+                    if href and any(href.lower().endswith(ext) for ext in (".mp4", ".webm", ".flv")):
                         return href
 
                     # Click and wait for navigation or new URL

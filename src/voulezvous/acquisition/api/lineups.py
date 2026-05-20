@@ -16,9 +16,7 @@ router = APIRouter(prefix="/lineup", tags=["lineup"])
 
 
 @router.post("/generate", response_model=LineupOut, status_code=201)
-async def generate_lineup_endpoint(
-    body: LineupGenerateRequest, db: AsyncSession = Depends(get_db)
-):
+async def generate_lineup_endpoint(body: LineupGenerateRequest, db: AsyncSession = Depends(get_db)):
     try:
         lineup = await generate_lineup(
             db,
@@ -30,19 +28,13 @@ async def generate_lineup_endpoint(
         raise HTTPException(400, str(e))
 
     # Reload with items
-    result = await db.execute(
-        select(LineupRun).where(LineupRun.id == lineup.id)
-        .options(selectinload(LineupRun.items))
-    )
+    result = await db.execute(select(LineupRun).where(LineupRun.id == lineup.id).options(selectinload(LineupRun.items)))
     return result.scalar_one()
 
 
 @router.get("/{lineup_id}", response_model=LineupOut)
 async def get_lineup(lineup_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(LineupRun).where(LineupRun.id == lineup_id)
-        .options(selectinload(LineupRun.items))
-    )
+    result = await db.execute(select(LineupRun).where(LineupRun.id == lineup_id).options(selectinload(LineupRun.items)))
     lineup = result.scalar_one_or_none()
     if not lineup:
         raise HTTPException(404, "Lineup not found")

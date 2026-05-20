@@ -32,7 +32,13 @@ def upgrade() -> None:
         sa.Column("max_pages_per_run", sa.Integer(), nullable=False, server_default=sa.text("5")),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # 2. search_keywords
@@ -46,7 +52,13 @@ def upgrade() -> None:
         sa.Column("source", sa.String(50), nullable=False, server_default="operator"),
         sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # 3. discovery_runs
@@ -58,7 +70,13 @@ def upgrade() -> None:
         sa.Column("input_summary", JSONB(), nullable=False, server_default="{}"),
         sa.Column("output_summary", JSONB(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # 5. retrieval_adapters (created before candidate_assets due to FK)
@@ -72,7 +90,13 @@ def upgrade() -> None:
         sa.Column("last_failure_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("failure_reason", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # 4. candidate_assets
@@ -95,7 +119,13 @@ def upgrade() -> None:
         sa.Column("discovery_status", sa.String(50), nullable=False, server_default="found"),
         sa.Column("rejection_reason", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # Add FK from retrieval_adapters back to candidate_assets
@@ -111,7 +141,9 @@ def upgrade() -> None:
     op.create_table(
         "asset_enrichments",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("candidate_asset_id", UUID(as_uuid=True), sa.ForeignKey("candidate_assets.id"), nullable=False, unique=True),
+        sa.Column(
+            "candidate_asset_id", UUID(as_uuid=True), sa.ForeignKey("candidate_assets.id"), nullable=False, unique=True
+        ),
         sa.Column("mood_tags", JSONB(), nullable=False, server_default="[]"),
         sa.Column("theme_tags", JSONB(), nullable=False, server_default="[]"),
         sa.Column("energy_score", sa.Numeric(3, 2), nullable=True),
@@ -123,7 +155,13 @@ def upgrade() -> None:
         sa.Column("llm_notes", sa.Text(), nullable=True),
         sa.Column("model_name", sa.String(200), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # 7. lineup_runs
@@ -134,7 +172,13 @@ def upgrade() -> None:
         sa.Column("status", sa.String(50), nullable=False, server_default="draft"),
         sa.Column("context_summary", JSONB(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # 8. lineup_items
@@ -150,7 +194,13 @@ def upgrade() -> None:
         sa.Column("music_asset_ref", sa.String(500), nullable=True),
         sa.Column("decision_reason", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # 9. media_ir_jobs
@@ -163,7 +213,13 @@ def upgrade() -> None:
         sa.Column("compiler_version", sa.String(50), nullable=False, server_default="1.0.0"),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
     # 10. autonomy_reports
@@ -174,7 +230,13 @@ def upgrade() -> None:
         sa.Column("summary", JSONB(), nullable=False, server_default="{}"),
         sa.Column("markdown_text", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+            nullable=False,
+        ),
     )
 
 

@@ -26,29 +26,21 @@ async def list_candidates(
         stmt = stmt.where(CandidateAsset.rights_status == rights_status)
     if retrieval_status:
         stmt = stmt.where(CandidateAsset.retrieval_status == retrieval_status)
-    result = await db.execute(
-        stmt.order_by(CandidateAsset.created_at.desc()).limit(limit)
-    )
+    result = await db.execute(stmt.order_by(CandidateAsset.created_at.desc()).limit(limit))
     return result.scalars().all()
 
 
 @router.get("/{candidate_id}", response_model=CandidateOut)
 async def get_candidate(candidate_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    c = (await db.execute(
-        select(CandidateAsset).where(CandidateAsset.id == candidate_id)
-    )).scalar_one_or_none()
+    c = (await db.execute(select(CandidateAsset).where(CandidateAsset.id == candidate_id))).scalar_one_or_none()
     if not c:
         raise HTTPException(404, "Candidate not found")
     return c
 
 
 @router.patch("/{candidate_id}", response_model=CandidateOut)
-async def update_candidate(
-    candidate_id: uuid.UUID, body: CandidateUpdate, db: AsyncSession = Depends(get_db)
-):
-    c = (await db.execute(
-        select(CandidateAsset).where(CandidateAsset.id == candidate_id)
-    )).scalar_one_or_none()
+async def update_candidate(candidate_id: uuid.UUID, body: CandidateUpdate, db: AsyncSession = Depends(get_db)):
+    c = (await db.execute(select(CandidateAsset).where(CandidateAsset.id == candidate_id))).scalar_one_or_none()
     if not c:
         raise HTTPException(404, "Candidate not found")
 

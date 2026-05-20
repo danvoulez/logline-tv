@@ -35,13 +35,17 @@ from voulezvous.acquisition.api import (
 )
 from voulezvous.api.routers import (
     assets,
-    director as director_router,
     health,
-    observability as obs_router,
     plans,
     prep,
     reports,
     stream,
+)
+from voulezvous.api.routers import (
+    director as director_router,
+)
+from voulezvous.api.routers import (
+    observability as obs_router,
 )
 from voulezvous.config import settings
 from voulezvous.logging_config import setup_logging
@@ -51,9 +55,11 @@ setup_logging()
 # Import MCP early so http_app() is created before FastAPI constructor
 from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
 from starlette.responses import JSONResponse  # noqa: E402
+
 from voulezvous.mcp.server import mcp as _mcp_server  # noqa: E402
 
 _mcp_http = _mcp_server.http_app(path="/")
+
 
 class _MCPTokenMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -63,6 +69,7 @@ class _MCPTokenMiddleware(BaseHTTPMiddleware):
             if auth != f"Bearer {token}":
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
         return await call_next(request)
+
 
 _mcp_http.add_middleware(_MCPTokenMiddleware)
 
@@ -87,7 +94,9 @@ class _APITokenMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     import asyncio
+
     from voulezvous.services.bootstrap import run_boot_tasks
+
     async with _mcp_http.router.lifespan_context(app):
         asyncio.create_task(run_boot_tasks())
         yield

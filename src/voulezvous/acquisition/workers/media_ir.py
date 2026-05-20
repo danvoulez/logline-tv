@@ -59,26 +59,32 @@ def build_ir_for_item(item: LineupItem, candidate: CandidateAsset) -> dict:
         slot_dur = int((item.target_end_at - item.target_start_at).total_seconds())
 
     if slot_dur and slot_dur < duration_sec:
-        ops.append({
-            "op": "trim",
-            "start_sec": 0,
-            "end_sec": slot_dur,
-        })
+        ops.append(
+            {
+                "op": "trim",
+                "start_sec": 0,
+                "end_sec": slot_dur,
+            }
+        )
 
     # Audio normalization
-    ops.append({
-        "op": "normalize_audio",
-        "target_lufs": -14.0,
-    })
+    ops.append(
+        {
+            "op": "normalize_audio",
+            "target_lufs": -14.0,
+        }
+    )
 
     # Music underlay if paired
     if item.music_asset_ref and item.slot_type == SlotType.main:
-        ops.append({
-            "op": "underlay_music",
-            "music_ref": item.music_asset_ref,
-            "video_gain": 0.5,
-            "music_gain": 0.5,
-        })
+        ops.append(
+            {
+                "op": "underlay_music",
+                "music_ref": item.music_asset_ref,
+                "video_gain": 0.5,
+                "music_gain": 0.5,
+            }
+        )
 
     # Fades for main content
     if item.slot_type == SlotType.main:
@@ -91,19 +97,18 @@ def build_ir_for_item(item: LineupItem, candidate: CandidateAsset) -> dict:
         ops.append({"op": "fade_out", "duration_sec": 0.5})
 
     # Export profile
-    ops.append({
-        "op": "export_profile",
-        "profile": "broadcast_standard",
-    })
+    ops.append(
+        {
+            "op": "export_profile",
+            "profile": "broadcast_standard",
+        }
+    )
 
     return {
         "asset_id": str(candidate.id),
         "source_url": candidate.source_url,
         "title": candidate.title,
-        "slot_type": (
-            item.slot_type.value if hasattr(item.slot_type, 'value')
-            else str(item.slot_type)
-        ),
+        "slot_type": (item.slot_type.value if hasattr(item.slot_type, "value") else str(item.slot_type)),
         "sequence_index": item.sequence_index,
         "ops": ops,
     }
@@ -111,16 +116,19 @@ def build_ir_for_item(item: LineupItem, candidate: CandidateAsset) -> dict:
 
 async def compile_media_ir(db: AsyncSession, lineup_id: uuid.UUID) -> dict:
     """Compile Media IR jobs for all items in a lineup."""
-    lineup = (await db.execute(
-        select(LineupRun).where(LineupRun.id == lineup_id)
-    )).scalar_one_or_none()
+    lineup = (await db.execute(select(LineupRun).where(LineupRun.id == lineup_id))).scalar_one_or_none()
     if not lineup:
         return {"error": "Lineup not found", "compiled": 0}
 
-    items = (await db.execute(
-        select(LineupItem).where(LineupItem.lineup_run_id == lineup_id)
-        .order_by(LineupItem.sequence_index)
-    )).scalars().all()
+    items = (
+        (
+            await db.execute(
+                select(LineupItem).where(LineupItem.lineup_run_id == lineup_id).order_by(LineupItem.sequence_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     compiled = 0
     failed = 0
@@ -130,9 +138,9 @@ async def compile_media_ir(db: AsyncSession, lineup_id: uuid.UUID) -> dict:
         if item.slot_type == SlotType.fallback_reserve:
             continue
 
-        candidate = (await db.execute(
-            select(CandidateAsset).where(CandidateAsset.id == item.candidate_asset_id)
-        )).scalar_one_or_none()
+        candidate = (
+            await db.execute(select(CandidateAsset).where(CandidateAsset.id == item.candidate_asset_id))
+        ).scalar_one_or_none()
 
         if not candidate:
             job = MediaIRJob(
@@ -170,6 +178,5 @@ async def compile_media_ir(db: AsyncSession, lineup_id: uuid.UUID) -> dict:
     lineup.status = LineupStatus.emitted
     await db.commit()
 
-    logger.info("media_ir_compiled", lineup_id=str(lineup_id),
-                compiled=compiled, failed=failed)
+    logger.info("media_ir_compiled", lineup_id=str(lineup_id), compiled=compiled, failed=failed)
     return {"lineup_id": str(lineup_id), "compiled": compiled, "failed": failed}

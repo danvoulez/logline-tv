@@ -30,16 +30,24 @@ router = APIRouter(prefix="/obs", tags=["observability"])
 @router.get("/snapshot")
 async def snapshot(db: AsyncSession = Depends(get_db)) -> dict:
     now = datetime.now(timezone.utc)
+    active_statuses = [
+        PlanStatus.approved,
+        PlanStatus.preparing,
+        PlanStatus.ready,
+        PlanStatus.streaming,
+    ]
 
     # ── Signal block ──────────────────────────────────────────────────────────
     control = await db.get(StreamControl, "main")
     current = None
     if control and control.current_item_id:
-        item = (await db.execute(
-            select(StreamPlanItem)
-            .where(StreamPlanItem.id == control.current_item_id)
-            .options(selectinload(StreamPlanItem.video_asset))
-        )).scalar_one_or_none()
+        item = (
+            await db.execute(
+                select(StreamPlanItem)
+                .where(StreamPlanItem.id == control.current_item_id)
+                .options(selectinload(StreamPlanItem.video_asset))
+            )
+        ).scalar_one_or_none()
         if item:
             current = {
                 "title": item.video_asset.title if item.video_asset else None,
@@ -48,15 +56,21 @@ async def snapshot(db: AsyncSession = Depends(get_db)) -> dict:
             }
 
     # next 5 items
-    next_items_rows = (await db.execute(
-        select(StreamPlanItem)
-        .join(StreamPlan)
-        .where(StreamPlan.status.in_([PlanStatus.approved, PlanStatus.preparing, PlanStatus.ready, PlanStatus.streaming]))
-        .where(StreamPlanItem.stream_status == StreamItemStatus.queued)
-        .options(selectinload(StreamPlanItem.video_asset))
-        .order_by(StreamPlanItem.planned_start_at, StreamPlanItem.sequence_index)
-        .limit(5)
-    )).scalars().all()
+    next_items_rows = (
+        (
+            await db.execute(
+                select(StreamPlanItem)
+                .join(StreamPlan)
+                .where(StreamPlan.status.in_(active_statuses))
+                .where(StreamPlanItem.stream_status == StreamItemStatus.queued)
+                .options(selectinload(StreamPlanItem.video_asset))
+                .order_by(StreamPlanItem.planned_start_at, StreamPlanItem.sequence_index)
+                .limit(5)
+            )
+        )
+        .scalars()
+        .all()
+    )
     next_items = [
         {
             "title": it.video_asset.title if it.video_asset else None,
@@ -83,37 +97,46 @@ async def snapshot(db: AsyncSession = Depends(get_db)) -> dict:
     }
 
     # ── Pipeline block ────────────────────────────────────────────────────────
-    queued_sec = (await db.execute(
-        select(func.coalesce(func.sum(StreamPlanItem.target_duration_sec), 0))
-        .join(StreamPlan)
-        .where(StreamPlan.status.in_([PlanStatus.approved, PlanStatus.preparing, PlanStatus.ready, PlanStatus.streaming]))
-        .where(StreamPlanItem.stream_status == StreamItemStatus.queued)
-    )).scalar_one() or 0
+    queued_sec = (
+        await db.execute(
+            select(func.coalesce(func.sum(StreamPlanItem.target_duration_sec), 0))
+            .join(StreamPlan)
+            .where(StreamPlan.status.in_(active_statuses))
+            .where(StreamPlanItem.stream_status == StreamItemStatus.queued)
+        )
+    ).scalar_one() or 0
 
     # active plan (most recent non-completed)
-    active_plan = (await db.execute(
-        select(StreamPlan)
-        .where(StreamPlan.status.in_([PlanStatus.approved, PlanStatus.preparing, PlanStatus.ready, PlanStatus.streaming]))
-        .order_by(desc(StreamPlan.created_at))
-        .limit(1)
-    )).scalar_one_or_none()
+    active_plan = (
+        await db.execute(
+            select(StreamPlan)
+            .where(StreamPlan.status.in_(active_statuses))
+            .order_by(desc(StreamPlan.created_at))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
     plan_block = None
     if active_plan:
-        ready = (await db.execute(
-            select(func.count(StreamPlanItem.id))
-            .where(StreamPlanItem.stream_plan_id == active_plan.id)
-            .where(StreamPlanItem.prep_status == PrepStatus.ready)
-        )).scalar_one() or 0
-        queued_items = (await db.execute(
-            select(func.count(StreamPlanItem.id))
-            .where(StreamPlanItem.stream_plan_id == active_plan.id)
-            .where(StreamPlanItem.prep_status == PrepStatus.queued)
-        )).scalar_one() or 0
-        total = (await db.execute(
-            select(func.count(StreamPlanItem.id))
-            .where(StreamPlanItem.stream_plan_id == active_plan.id)
-        )).scalar_one() or 0
+        ready = (
+            await db.execute(
+                select(func.count(StreamPlanItem.id))
+                .where(StreamPlanItem.stream_plan_id == active_plan.id)
+                .where(StreamPlanItem.prep_status == PrepStatus.ready)
+            )
+        ).scalar_one() or 0
+        queued_items = (
+            await db.execute(
+                select(func.count(StreamPlanItem.id))
+                .where(StreamPlanItem.stream_plan_id == active_plan.id)
+                .where(StreamPlanItem.prep_status == PrepStatus.queued)
+            )
+        ).scalar_one() or 0
+        total = (
+            await db.execute(
+                select(func.count(StreamPlanItem.id)).where(StreamPlanItem.stream_plan_id == active_plan.id)
+            )
+        ).scalar_one() or 0
         plan_block = {
             "id": str(active_plan.id),
             "status": active_plan.status.value if hasattr(active_plan.status, "value") else str(active_plan.status),
@@ -129,12 +152,12 @@ async def snapshot(db: AsyncSession = Depends(get_db)) -> dict:
     }
 
     # ── Brain block ───────────────────────────────────────────────────────────
-    last_run = (await db.execute(
-        select(DirectorRun).order_by(desc(DirectorRun.started_at)).limit(1)
-    )).scalar_one_or_none()
-    recent_actions_rows = (await db.execute(
-        select(DirectorAction).order_by(desc(DirectorAction.created_at)).limit(30)
-    )).scalars().all()
+    last_run = (
+        await db.execute(select(DirectorRun).order_by(desc(DirectorRun.started_at)).limit(1))
+    ).scalar_one_or_none()
+    recent_actions_rows = (
+        (await db.execute(select(DirectorAction).order_by(desc(DirectorAction.created_at)).limit(30))).scalars().all()
+    )
     recent_actions = [
         {
             "at": a.created_at.isoformat() if a.created_at else None,
@@ -161,16 +184,14 @@ async def snapshot(db: AsyncSession = Depends(get_db)) -> dict:
     except Exception:
         ollama_ok = False
 
-    last_discovery = (await db.execute(
-        select(DiscoveryRun).order_by(desc(DiscoveryRun.created_at)).limit(1)
-    )).scalar_one_or_none()
+    last_discovery = (
+        await db.execute(select(DiscoveryRun).order_by(desc(DiscoveryRun.created_at)).limit(1))
+    ).scalar_one_or_none()
 
     # Library health
-    avg_health = (await db.execute(
-        select(func.avg(LibraryAsset.health_score)).where(
-            LibraryAsset.health_score.isnot(None)
-        )
-    )).scalar_one()
+    avg_health = (
+        await db.execute(select(func.avg(LibraryAsset.health_score)).where(LibraryAsset.health_score.isnot(None)))
+    ).scalar_one()
 
     health = {
         "ollama_reachable": ollama_ok,

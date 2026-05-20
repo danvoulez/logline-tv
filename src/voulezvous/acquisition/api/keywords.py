@@ -38,12 +38,8 @@ async def list_keywords(
 
 
 @router.patch("/{keyword_id}", response_model=KeywordOut)
-async def update_keyword(
-    keyword_id: uuid.UUID, body: KeywordUpdate, db: AsyncSession = Depends(get_db)
-):
-    kw = (await db.execute(
-        select(SearchKeyword).where(SearchKeyword.id == keyword_id)
-    )).scalar_one_or_none()
+async def update_keyword(keyword_id: uuid.UUID, body: KeywordUpdate, db: AsyncSession = Depends(get_db)):
+    kw = (await db.execute(select(SearchKeyword).where(SearchKeyword.id == keyword_id))).scalar_one_or_none()
     if not kw:
         raise HTTPException(404, "Keyword not found")
 

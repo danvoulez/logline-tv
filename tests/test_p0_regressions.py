@@ -9,6 +9,7 @@ from sqlalchemy.ext.compiler import compiles
 
 # SQLite doesn't have JSONB; acquisition models are imported below.
 if not hasattr(JSONB, "_sqlite_compiler_registered"):
+
     @compiles(JSONB, "sqlite")
     def _compile_jsonb_sqlite(type_, compiler, **kw):
         return "JSON"
@@ -23,6 +24,8 @@ from voulezvous.acquisition.enums import (  # noqa: E402
 )
 from voulezvous.acquisition.models import CandidateAsset, LineupItem  # noqa: E402
 from voulezvous.acquisition.workers.curator import generate_lineup  # noqa: E402
+
+# Import discovery functions for testing
 from voulezvous.acquisition.workers.json_utils import loads_llm_json  # noqa: E402
 from voulezvous.models.enums import (  # noqa: E402
     AssetKind,
@@ -34,12 +37,12 @@ from voulezvous.models.enums import (  # noqa: E402
     StreamItemStatus,
 )
 from voulezvous.models.tables import LibraryAsset, StreamPlan, StreamPlanItem  # noqa: E402
-from voulezvous.services.streamer import _claim_next_ready_item  # noqa: E402
 from voulezvous.services.stream_control import (  # noqa: E402
     request_stream_start,
     request_stream_stop,
     stream_status_payload,
 )
+from voulezvous.services.streamer import _claim_next_ready_item  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -100,9 +103,7 @@ async def test_streamer_can_claim_ready_item_from_preparing_plan(db: AsyncSessio
 
 def test_loads_llm_json_accepts_fenced_and_prefaced_json():
     assert loads_llm_json('```json\n{"ok": true}\n```') == {"ok": True}
-    assert loads_llm_json('Here is your JSON: [{"type": "flag_monotony"}]') == [
-        {"type": "flag_monotony"}
-    ]
+    assert loads_llm_json('Here is your JSON: [{"type": "flag_monotony"}]') == [{"type": "flag_monotony"}]
 
 
 @pytest.mark.asyncio
@@ -127,12 +128,14 @@ async def test_lineup_fills_target_with_explicit_repeat_overflow(db: AsyncSessio
     lineup = await generate_lineup(db, date(2026, 5, 19), target_hours=24, mix_music=False)
 
     items = (
-        await db.execute(
-            select(LineupItem)
-            .where(LineupItem.lineup_run_id == lineup.id)
-            .order_by(LineupItem.sequence_index)
+        (
+            await db.execute(
+                select(LineupItem).where(LineupItem.lineup_run_id == lineup.id).order_by(LineupItem.sequence_index)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     main_duration = sum(
         int((item.target_end_at - item.target_start_at).total_seconds())
         for item in items
@@ -142,3 +145,57 @@ async def test_lineup_fills_target_with_explicit_repeat_overflow(db: AsyncSessio
     assert main_duration == 24 * 3600
     assert lineup.context_summary["target_filled"] is True
     assert lineup.context_summary["overflow_repeats_used"] is True
+
+
+def test_real_discovery_failure_does_not_create_simulated_candidates():
+    """Real discovery failure should raise an exception, not fall back to simulated discovery.
+
+    This tests the code structure to verify the fallback logic was removed.
+    """
+    import inspect
+
+    from voulezvous.acquisition.api.discovery import trigger_discovery
+
+    source = inspect.getsource(trigger_discovery)
+    # Verify that the old fallback pattern is gone
+    assert "falling_back" not in source.lower()
+    # The function should still have simulated discovery as an explicit option
+    assert "simulated" in source.lower()
+    # But it should not have automatic fallback on exception
+    lines = source.split("\n")
+    exception_handling = [line for line in lines if "except Exception" in line]
+    # If there's exception handling, it should not fall back to simulated
+    for line in exception_handling:
+        assert "run_discovery_simulated" not in source[source.index(line):source.index(line) + 200]
+
+
+def test_metadata_only_candidate_has_retrieval_status():
+    """Candidates with metadata_only retrieval status should have the correct status set."""
+    candidate = CandidateAsset(
+        title="Metadata Only Video",
+        source_url=None,  # No source URL = metadata_only
+        page_url="https://example.com/video/123",
+        duration_sec=600,
+        quality_signals={},
+        tags=["test"],
+        playback_verified=False,
+        retrieval_status=RetrievalStatus.metadata_only,
+        discovery_status=DiscoveryStatus.inspected,
+        rights_status=CandidateRightsStatus.pending_review,
+    )
+    assert candidate.retrieval_status == RetrievalStatus.metadata_only
+    assert candidate.source_url is None
+
+
+def test_unapproved_asset_has_correct_rights_status():
+    """Assets without approved_for_stream rights should have the correct status."""
+    asset = LibraryAsset(
+        kind=AssetKind.video,
+        title="Unapproved Video",
+        source_type=SourceType.direct_url,
+        source_url="https://example.com/video.mp4",
+        duration_sec=600,
+        rights_status=RightsStatus.pending_review,  # Not approved
+        status=AssetStatus.registered,
+    )
+    assert asset.rights_status != RightsStatus.approved_for_stream

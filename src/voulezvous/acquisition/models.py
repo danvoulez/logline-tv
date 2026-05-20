@@ -44,9 +44,7 @@ class DomainPolicy(Base, UUIDPrimaryKey, TimestampMixin):
     )
     allowed_actions: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
     retrieval_modes: Mapped[dict] = mapped_column(JSONB, server_default="[]", nullable=False)
-    requires_playback_verification: Mapped[bool] = mapped_column(
-        Boolean, default=True, nullable=False
-    )
+    requires_playback_verification: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     quality_floor: Mapped[str | None] = mapped_column(String(50), nullable=True)
     max_pages_per_run: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -74,12 +72,8 @@ class DomainPolicy(Base, UUIDPrimaryKey, TimestampMixin):
     )
     is_adult: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     requires_login: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    needs_media_interception: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
-    title_suffix_strips: Mapped[list] = mapped_column(
-        JSONB, server_default="[]", nullable=False
-    )
+    needs_media_interception: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    title_suffix_strips: Mapped[list] = mapped_column(JSONB, server_default="[]", nullable=False)
 
 
 class SearchKeyword(Base, UUIDPrimaryKey, TimestampMixin):
@@ -130,9 +124,7 @@ class CandidateAsset(Base, UUIDPrimaryKey, TimestampMixin):
     duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
     quality_signals: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
     tags: Mapped[dict] = mapped_column(JSONB, server_default="[]", nullable=False)
-    extra_metadata: Mapped[dict] = mapped_column(
-        "metadata", JSONB, server_default="{}", nullable=False
-    )
+    extra_metadata: Mapped[dict] = mapped_column("metadata", JSONB, server_default="{}", nullable=False)
     playback_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     retrieval_status: Mapped[RetrievalStatus] = mapped_column(
         Enum(RetrievalStatus, native_enum=False),
@@ -161,9 +153,7 @@ class CandidateAsset(Base, UUIDPrimaryKey, TimestampMixin):
     retrieval_adapter: Mapped["RetrievalAdapter | None"] = relationship(
         foreign_keys=[retrieval_adapter_id],
     )
-    enrichment: Mapped["AssetEnrichment | None"] = relationship(
-        back_populates="candidate_asset", uselist=False
-    )
+    enrichment: Mapped["AssetEnrichment | None"] = relationship(back_populates="candidate_asset", uselist=False)
 
 
 class RetrievalAdapter(Base, UUIDPrimaryKey, TimestampMixin):
@@ -172,16 +162,10 @@ class RetrievalAdapter(Base, UUIDPrimaryKey, TimestampMixin):
     candidate_asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("candidate_assets.id"), nullable=False
     )
-    adapter_type: Mapped[AdapterType] = mapped_column(
-        Enum(AdapterType, native_enum=False), nullable=False
-    )
+    adapter_type: Mapped[AdapterType] = mapped_column(Enum(AdapterType, native_enum=False), nullable=False)
     adapter_spec: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
-    last_success_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_failure_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     candidate_asset: Mapped["CandidateAsset"] = relationship(
@@ -234,19 +218,13 @@ class LineupRun(Base, UUIDPrimaryKey, TimestampMixin):
 class LineupItem(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "lineup_items"
 
-    lineup_run_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("lineup_runs.id"), nullable=False
-    )
+    lineup_run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lineup_runs.id"), nullable=False)
     sequence_index: Mapped[int] = mapped_column(Integer, nullable=False)
     candidate_asset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("candidate_assets.id"), nullable=False
     )
-    target_start_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    target_end_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    target_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    target_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     slot_type: Mapped[SlotType] = mapped_column(
         Enum(SlotType, native_enum=False), default=SlotType.main, nullable=False
     )
@@ -260,18 +238,14 @@ class LineupItem(Base, UUIDPrimaryKey, TimestampMixin):
 class MediaIRJob(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "media_ir_jobs"
 
-    lineup_item_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("lineup_items.id"), nullable=False
-    )
+    lineup_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lineup_items.id"), nullable=False)
     status: Mapped[MediaIRStatus] = mapped_column(
         Enum(MediaIRStatus, native_enum=False),
         default=MediaIRStatus.queued,
         nullable=False,
     )
     ir_json: Mapped[dict] = mapped_column(JSONB, server_default="{}", nullable=False)
-    compiler_version: Mapped[str] = mapped_column(
-        String(50), default="1.0.0", nullable=False
-    )
+    compiler_version: Mapped[str] = mapped_column(String(50), default="1.0.0", nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     lineup_item: Mapped["LineupItem"] = relationship()

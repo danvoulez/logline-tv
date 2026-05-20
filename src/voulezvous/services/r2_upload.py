@@ -28,9 +28,7 @@ async def upload_file_wrangler(local_path: Path, r2_key: str) -> bool:
     bucket = settings.cloudflare_r2_bucket
     cmd = ["wrangler", "r2", "object", "put", f"{bucket}/{r2_key}", "--file", str(local_path)]
     logger.info("r2_wrangler_upload", key=r2_key)
-    proc = await asyncio.create_subprocess_exec(
-        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
+    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     _, stderr = await proc.communicate()
     if proc.returncode != 0:
         logger.error("r2_wrangler_upload_failed", key=r2_key, error=stderr.decode()[-300:])
@@ -79,6 +77,7 @@ async def upload_file_boto3(local_path: Path, r2_key: str) -> str:
 
 def _boto3_client():
     import boto3
+
     return boto3.client(
         "s3",
         endpoint_url=f"https://{settings.cloudflare_account_id}.r2.cloudflarestorage.com",

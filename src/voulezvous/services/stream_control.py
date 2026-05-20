@@ -77,8 +77,7 @@ async def stream_status_payload(db: AsyncSession) -> dict:
     control = await get_or_create_stream_control(db)
     return {
         "desired_running": control.desired_running,
-        "running": control.desired_running
-        and control.status in {"running", "streaming", "fallback"},
+        "running": control.desired_running and control.status in {"running", "streaming", "fallback"},
         "status": control.status,
         "current_item_id": str(control.current_item_id) if control.current_item_id else None,
         "heartbeat_at": control.heartbeat_at.isoformat() if control.heartbeat_at else None,
