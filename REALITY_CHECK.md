@@ -1311,8 +1311,19 @@ Fix:
   generate_plan.sh script added to capture PLAN_ID exactly once.
   burnin_probe.sh updated to filter by PLAN_ID when provided.
 
+### Phase 6 burn-in attempt 2: running
+
+Reason:
+  First burn-in attempt used 1-hour plan (360 items) which only provides 1510 seconds of ready content (151 items × 10 sec), insufficient for 1800 second threshold.
+
+Fix:
+  Generated 24h plan (8640 items) to provide sufficient content for 1800 second threshold.
+  Burn-in restarted with 24h plan ID 70247a9d-255b-4450-9784-24efedeb3530.
+  Ready buffer reached 1960 sec (196 items) after ~90 seconds, threshold passed.
+  Stream started successfully at 2026-05-20T22:28:00Z.
+
 Status:
-  24h burn-in remains unverified.
+  24h burn-in in progress (started 2026-05-20T22:28:00Z, expected end 2026-05-21T22:28:00Z).
 
 Receipt:
 ```bash
