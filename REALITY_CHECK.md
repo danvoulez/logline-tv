@@ -1289,6 +1289,152 @@ ssh danvoulez@lab-512.local 'cd ~/logline-tv && eval "$(/opt/homebrew/bin/brew s
 # Verification: No library assets created
 ```
 
+## Phase 6 — 24h Burn-in
+
+### Phase 6 burn-in attempt 1: failed
+
+Reason:
+  Stream was started before sufficient ready buffer existed.
+  Prep worker could not keep up from cold start.
+  Streamer entered repeated fallback after consuming the initial ready items.
+
+Finding:
+  Continuous operation needs an explicit prep readiness gate.
+
+Fix:
+  STREAM_MIN_READY_BUFFER_SEC added (default 1800s / 30 min).
+  /stream/start now rejects below threshold with explicit error response.
+  /obs/snapshot exposes ready buffer fields (ready_buffer_sec, ready_buffer_min, ready_items, queued_items).
+  calculate_ready_buffer() helper added to compute ready duration for queued stream items.
+  burn-in runner (run_burnin_24h.sh) waits for readiness before starting stream.
+  wait_for_ready_buffer.sh script added for polling readiness.
+  generate_plan.sh script added to capture PLAN_ID exactly once.
+  burnin_probe.sh updated to filter by PLAN_ID when provided.
+
+Status:
+  24h burn-in remains unverified.
+
+Receipt:
+```bash
+# Prep depth at failure
+SELECT prep_status, stream_status, COUNT(*)
+FROM stream_plan_items
+GROUP BY prep_status, stream_status;
+# Result: ready/completed: 11, queued: 17269
+
+# Stream events at failure
+SELECT event_type, COUNT(*)
+FROM stream_events
+GROUP BY event_type;
+# Result: item_started: 11, item_completed: 11, fallback_started: 7, fallback_stopped: 6
+
+# Disk usage
+du -sh /spool
+# Result: 200M (stable, not growing unbounded)
+
+# HLS segment count
+ls /spool/hls/*.ts | wc -l
+# Result: 2592 (stable, bounded)
+```
+
+### Phase 6 Readiness Gate Implementation
+
+```bash
+# Config added to src/voulezvous/config.py
+stream_min_ready_buffer_sec: int = 1800
+burnin_ready_timeout_sec: int = 1800
+
+# Helper added to src/voulezvous/services/stream_control.py
+async def calculate_ready_buffer(
+    db: AsyncSession,
+    plan_id: uuid.UUID | None = None,
+) -> dict:
+    """Calculate ready buffer for stream start admission.
+
+    Returns:
+        Dict with:
+        - ready_items: count of ready items
+        - ready_duration_sec: sum of target_duration_sec for ready items
+        - queued_items: count of queued items
+        - queued_duration_sec: sum of target_duration_sec for queued items
+
+    Filters by plan_id if provided, otherwise includes all active plans.
+    """
+
+# Exception added to src/voulezvous/services/stream_control.py
+class ReadyBufferBelowThresholdError(Exception):
+    """Raised when stream start is requested but ready buffer is below threshold."""
+
+    def __init__(self, ready_buffer_sec: int, min_ready_buffer_sec: int):
+        self.ready_buffer_sec = ready_buffer_sec
+        self.min_ready_buffer_sec = min_ready_buffer_sec
+        super().__init__(
+            f"Ready buffer ({ready_buffer_sec}s) below threshold ({min_ready_buffer_sec}s). "
+            "Wait for prep_worker to prepare more items before starting stream."
+        )
+
+# request_stream_start updated to check ready buffer
+async def request_stream_start(db: AsyncSession) -> StreamControl:
+    # Check ready buffer before allowing start
+    ready_buffer = await calculate_ready_buffer(db)
+    if ready_buffer["ready_duration_sec"] < settings.stream_min_ready_buffer_sec:
+        raise ReadyBufferBelowThresholdError(
+            ready_buffer_sec=ready_buffer["ready_duration_sec"],
+            min_ready_buffer_sec=settings.stream_min_ready_buffer_sec,
+        )
+
+    control = await get_or_create_stream_control(db)
+    control.desired_running = True
+    control.status = "start_requested"
+    control.heartbeat_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(control)
+    return control
+
+# API endpoint updated to handle readiness rejection
+# src/voulezvous/api/routers/stream.py
+@router.post("/start")
+async def stream_start(db: AsyncSession = Depends(get_db)):
+    try:
+        control = await request_stream_start(db)
+        return {"status": control.status, "desired_running": control.desired_running}
+    except ReadyBufferBelowThresholdError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "status": "rejected",
+                "reason": "ready_buffer_below_threshold",
+                "ready_buffer_sec": e.ready_buffer_sec,
+                "min_ready_buffer_sec": e.min_ready_buffer_sec,
+            },
+        )
+
+# Observability snapshot updated to include ready buffer
+# src/voulezvous/api/routers/observability.py
+ready_buffer = await calculate_ready_buffer(db)
+ready_buffer_min = round(ready_buffer["ready_duration_sec"] / 60, 2)
+
+pipeline = {
+    "queued_hours": round(int(queued_sec) / 3600, 2),
+    "ready_buffer_sec": ready_buffer["ready_duration_sec"],
+    "ready_buffer_min": ready_buffer_min,
+    "ready_items": ready_buffer["ready_items"],
+    "queued_items": ready_buffer["queued_items"],
+    "disk": disk_usage_spool(),
+    "plan": plan_block,
+}
+
+# Scripts added
+# scripts/wait_for_ready_buffer.sh - polls /obs/snapshot for readiness
+# scripts/generate_plan.sh - generates plan and captures PLAN_ID exactly once
+# scripts/run_burnin_24h.sh - updated to wait for readiness before starting stream
+# scripts/burnin_probe.sh - updated to filter by PLAN_ID when provided
+
+# Tests added
+# tests/test_readiness_gate.py - 4 tests for readiness gate functionality
+# tests/test_p0_regressions.py - updated test_stream_control_is_database_backed to use monkeypatch for threshold
+```
+
 ## Release Candidate — harden-real-runtime
 
 Verified:
@@ -1307,7 +1453,8 @@ Verified:
 - promotion gates: Verified via local tests (metadata_only and unauthorized candidates rejected)
 
 Not production-ready:
-- no 24h burn-in
+- 24h burn-in failed (prep queue exhaustion with 3 deterministic videos)
+- insufficient media diversity for 24h operation
 - no production CDN
 - no viewer analytics
 - real external acquisition not validated

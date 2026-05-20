@@ -7,6 +7,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.compiler import compiles
 
+from voulezvous.config import settings
+
 # SQLite doesn't have JSONB; acquisition models are imported below.
 if not hasattr(JSONB, "_sqlite_compiler_registered"):
 
@@ -46,7 +48,10 @@ from voulezvous.services.streamer import _claim_next_ready_item  # noqa: E402
 
 
 @pytest.mark.asyncio
-async def test_stream_control_is_database_backed(db: AsyncSession):
+async def test_stream_control_is_database_backed(db: AsyncSession, monkeypatch):
+    # Set low threshold for this test to avoid ready buffer check
+    monkeypatch.setattr(settings, "stream_min_ready_buffer_sec", 0)
+
     await request_stream_start(db)
     status = await stream_status_payload(db)
     assert status["desired_running"] is True

@@ -38,6 +38,10 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # ── Stream readiness ─────────────────────────────────────────────────────
+    stream_min_ready_buffer_sec: int = 1800
+    burnin_ready_timeout_sec: int = 1800
+
     # ── Local LLM (Ollama) ────────────────────────────────────────────────────
     local_llm_url: str = "http://host.docker.internal:11434"
     ollama_model: str = "llama3.2"
