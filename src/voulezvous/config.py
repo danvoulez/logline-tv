@@ -3,6 +3,25 @@ from pathlib import Path
 from pydantic_settings import BaseSettings
 
 
+def redact_passwords(text: str) -> str:
+    """Redact password-like patterns from text for logging."""
+    import re
+
+    # Redact common password patterns
+    patterns = [
+        r'password["\']?\s*[:=]\s*["\']?[^\s"\'<>]+["\']?',  # password: "xxx" or password='xxx'
+        r'credential_password["\']?\s*[:=]\s*["\']?[^\s"\'<>]+["\']?',  # credential_password: "xxx"
+        r'secret["\']?\s*[:=]\s*["\']?[^\s"\'<>]+["\']?',  # secret: "xxx"
+        r'token["\']?\s*[:=]\s*["\']?[^\s"\'<>]+["\']?',  # token: "xxx"
+        r'api_key["\']?\s*[:=]\s*["\']?[^\s"\'<>]+["\']?',  # api_key: "xxx"
+    ]
+
+    for pattern in patterns:
+        text = re.sub(pattern, '[REDACTED]', text, flags=re.IGNORECASE)
+
+    return text
+
+
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@db:5432/voulezvous"
     database_url_sync: str = "postgresql://postgres:postgres@db:5432/voulezvous"
