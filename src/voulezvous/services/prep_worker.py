@@ -22,6 +22,32 @@ from voulezvous.services.ffmpeg import mix_audio, normalize_video
 
 logger = structlog.get_logger()
 
+
+def _validate_local_path(path: Path) -> None:
+    """Validate that a local path is within the spool directory for security.
+    
+    Args:
+        path: Path to validate
+        
+    Raises:
+        ValueError: If path is outside spool directory or contains path traversal
+    """
+    try:
+        # Resolve to absolute path and check for path traversal
+        resolved = path.resolve()
+        spool_root = settings.spool_root.resolve()
+        
+        # Check if resolved path is within spool_root
+        try:
+            resolved.relative_to(spool_root)
+        except ValueError:
+            raise ValueError(
+                f"Local path {resolved} is outside spool directory {spool_root}. "
+                "Local files must be under configured spool root."
+            )
+    except Exception as e:
+        raise ValueError(f"Invalid local path {path}: {e}")
+
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _STALE_PREPARING_TIMEOUT = timedelta(minutes=60)
 
@@ -210,6 +236,7 @@ async def _download_asset(db: AsyncSession, asset: LibraryAsset) -> Path:
         checksum, size = await _stream_http_to_file(asset.source_url, dest)
     elif asset.source_type.value == "uploaded_file" and asset.local_source_path:
         src = Path(asset.local_source_path)
+        _validate_local_path(src)  # Security check
         if not src.exists():
             raise FileNotFoundError(f"Local source not found: {src}")
         checksum, size = await _copy_file_streaming(src, dest)
