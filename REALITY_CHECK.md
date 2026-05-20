@@ -371,25 +371,26 @@ total 30732
 # - All tests pass (42 passed), ruff check passes, compileall passes
 ```
 
-**Phase 2.5**: ✅ COMPLETE
-- HLS MIME types fixed (playlist: application/vnd.apple.mpegurl, segments: video/mp2t)
-- Stream event traceability fixed (plan_id now included in all event logs)
-- HLS router created with proper MIME type handling and security checks
-- Browser/media-client playback verified (HLS files served with correct MIME types)
-- Restart safety tested (containers restart successfully, HLS router persists)
-- Local repo admission verified (ruff, pytest, compileall all pass)
-- Docker admission verified on lab-512 (containers rebuilt and restarted successfully)
+**Phase 2.5**: ⚠️ PARTIAL
+- HLS MIME types: verified
+- Media-client playback via ffmpeg: verified
+- Browser playback: unverified
+- Item-event plan_id traceability: inconclusive (prep-worker cannot resolve file:// URLs)
+- Restart playback: verified
 
 ### Phase 2.5 Receipt
 ```bash
 # Command: Verify HLS playlist MIME type
-curl -I http://localhost:8000/hls/stream.m3u8 -X GET
+curl -i http://localhost:8000/hls/stream.m3u8 | head -15
 
 # Output: Correct MIME type for HLS playlist
 HTTP/1.1 200 OK
 content-type: application/vnd.apple.mpegurl
 cache-control: no-cache
 access-control-allow-origin: *
+#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-TARGETDURATION:8
 
 # Command: Verify HLS segment MIME type
 curl -I http://localhost:8000/hls/seg_00000.ts -X GET
@@ -400,93 +401,114 @@ content-type: video/mp2t
 cache-control: no-cache
 access-control-allow-origin: *
 
-# Command: Test path traversal protection
-curl -I http://localhost:8000/hls/../etc/passwd -X GET
+# Command: Media-client playback verification with ffprobe
+docker exec logline-tv-api-1 ffprobe -v error -show_streams http://localhost:8000/hls/stream.m3u8
 
-# Output: Path traversal rejected (404)
-HTTP/1.1 404 Not Found
+# Output: Video and audio streams detected
+[STREAM]
+index=0
+codec_name=h264
+codec_type=video
+width=1920
+height=1080
+[/STREAM]
+[STREAM]
+index=1
+codec_name=aac
+codec_type=audio
+sample_rate=48000
+[/STREAM]
 
-# Command: Test invalid extension rejection
-curl -I http://localhost:8000/hls/test.txt -X GET
+# Command: Media-client playback verification with ffmpeg (30s)
+docker exec logline-tv-api-1 ffmpeg -v warning -i http://localhost:8000/hls/stream.m3u8 -t 30 -f null -
 
-# Output: Invalid extension rejected (400)
-HTTP/1.1 400 Bad Request
+# Output: Exits 0 (playback succeeds)
+# Note: Timestamp discontinuity warnings are expected for HLS live streaming with discontinuity tags
 
-# Command: Verify stream events include plan_id
-docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT id, event_type, plan_id, occurred_at FROM stream_events ORDER BY occurred_at DESC LIMIT 5;"
+# Command: Verify stream_events plan_id on item events
+docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "
+SELECT event_type, plan_id, plan_item_id, asset_id, occurred_at
+FROM stream_events
+WHERE event_type IN ('item_started', 'item_completed', 'item_failed')
+ORDER BY occurred_at DESC
+LIMIT 20;"
 
-# Output: plan_id column populated in stream_events table
-                  id                  |    event_type    |               plan_id               |          occurred_at          
---------------------------------------+------------------+--------------------------------------+-------------------------------
- b5a968f5-7b27-427e-b3bf-1d7a92a897e8 | fallback_stopped |                                      | 2026-05-20 05:11:21.022882+00
- 267fb672-31c4-4dc8-ae3c-7520639adb37 | fallback_started |                                      | 2026-05-20 05:11:11.432777+00
- 5aaa3e7a-5703-4cce-85d2-1370401b8898 | stream_started   |                                      | 2026-05-20 05:10:27.567906+00
+# Output: No item-level events (0 rows)
+ event_type | plan_id | plan_item_id | asset_id | occurred_at 
+------------+---------+--------------+----------+-------------
+(0 rows)
 
-# Note: plan_id is NULL for fallback events but column exists and is populated for plan item events
+# Note: Item-level events cannot be verified because prep-worker fails to resolve file:// URLs
+# Stream events table has plan_id column but no item events to verify population
+
+# Command: Check current stream events (fallback-level only)
+docker exec logline-tv-db-1 psql -U postgres -d voulezvous -c "SELECT event_type, plan_id, plan_item_id, asset_id, occurred_at FROM stream_events ORDER BY occurred_at DESC LIMIT 5;"
+
+# Output: Only fallback events (plan_id NULL is expected for fallback)
+    event_type    | plan_id | plan_item_id | asset_id |          occurred_at          
+------------------+---------+--------------+----------+-------------------------------
+ fallback_started |         |              |          | 2026-05-20 05:21:28.825844+00
+ fallback_stopped |         |              |          | 2026-05-20 05:21:23.787918+00
+ fallback_started |         |              |          | 2026-05-20 05:21:14.200627+00
+
+# Command: Restart safety - restart streamer
+docker compose restart streamer
+
+# Output: Container restarted successfully
+Container logline-tv-streamer-1 Restarting
+Container logline-tv-streamer-1 Started
+
+# Command: Verify HLS MIME after restart
+curl -I http://localhost:8000/hls/stream.m3u8 -X GET
+
+# Output: HLS playlist still served with correct MIME type
+HTTP/1.1 200 OK
+content-type: application/vnd.apple.mpegurl
+
+# Command: Verify segment MIME after restart
+curl -I http://localhost:8000/hls/seg_00000.ts -X GET
+
+# Output: Segment still served with correct MIME type
+HTTP/1.1 200 OK
+content-type: video/mp2t
+
+# Command: Verify playback after restart (15s)
+docker exec logline-tv-api-1 ffmpeg -v warning -i http://localhost:8000/hls/stream.m3u8 -t 15 -f null -
+
+# Output: Exits 0 (playback succeeds after restart)
+
+# Command: Check streamer logs after restart
+docker logs logline-tv-streamer-1 --tail 5
+
+# Output: HLS output resumed with fallback
+{"event": "streamer_started", "target": "hls"}
+{"event": "playing_fallback", "path": "/spool/fallback/fallback.mp4"}
+{"event": "ffmpeg_run", "cmd": "ffmpeg ... -f hls ... /spool/hls/stream.m3u8"}
 
 # Command: Local repo admission - ruff
 cd /Users/ubl-ops/logline-tv && uv run ruff check .
 
-# Output: No errors (15 fixable issues auto-fixed)
-Found 15 errors (15 fixed, 0 remaining).
+# Output: All checks passed
+All checks passed!
 
 # Command: Local repo admission - pytest
-cd /Users/ubl-ops/logline-tv && uv run pytest -xvs
+cd /Users/ubl-ops/logline-tv && uv run pytest -q
 
 # Output: All 51 tests pass
-======================= 51 passed, 21 warnings in 4.61s ========================
+51 passed, 21 warnings in 4.36s
 
 # Command: Local repo admission - compileall
-cd /Users/ubl-ops/logline-tv && uv run python -m compileall src/
+cd /Users/ubl-ops/logline-tv && uv run python -m compileall -q src tests alembic
 
 # Output: No compilation errors
-Compiling src/voulezvous/...
 
-# Command: Docker admission - rebuild containers
-cd ~/logline-tv && docker compose build
-
-# Output: All images built successfully
-Image logline-tv-migrate Built
-Image logline-tv-api Built
-Image logline-tv-prep-worker Built
-Image logline-tv-streamer Built
-Image logline-tv-director Built
-
-# Command: Docker admission - restart containers
-docker compose up -d
-
-# Output: All containers recreated and started
-Container logline-tv-api-1 Recreated
-Container logline-tv-streamer-1 Recreated
-Container logline-tv-prep-worker-1 Recreated
-
-# Command: Verify health after restart
-curl -s http://localhost:8000/health
-
-# Output: Health check passes
-{"status":"ok","version":"0.1.0"}
-
-# Command: Verify HLS router after restart
-curl -I http://localhost:8000/hls/stream.m3u8 -X GET
-
-# Output: HLS router still working with correct MIME type
-HTTP/1.1 200 OK
-content-type: application/vnd.apple.mpegurl
-
-# Verification: Manual inspection confirmed
-# - HLS playlist served with correct MIME type (application/vnd.apple.mpegurl)
-# - HLS segments served with correct MIME type (video/mp2t)
-# - Path traversal attacks rejected (404)
-# - Invalid file extensions rejected (400)
-# - CORS headers present (access-control-allow-origin: *)
-# - Cache control headers present (cache-control: no-cache)
-# - Stream events table includes plan_id column
-# - Stream events logged with plan_id where available
-# - Local repo admission passes (ruff, pytest, compileall)
-# - Docker containers rebuild successfully
-# - Docker containers restart successfully
-# - HLS router persists after restart with correct MIME types
-# - All 51 tests pass including new HLS serving tests
+# Verification state:
+# - HLS MIME types: verified (playlist: application/vnd.apple.mpegurl, segments: video/mp2t)
+# - Media-client playback via ffmpeg: verified (ffprobe detects streams, ffmpeg exits 0)
+# - Browser playback: unverified (no HLS.js/Safari probe performed)
+# - Item-event plan_id traceability: inconclusive (prep-worker cannot resolve file:// URLs, no item events to verify)
+# - Restart playback: verified (HLS persists, ffmpeg exits 0 after restart)
+# - uv.lock: restored (was accidentally deleted in previous commit)
 ```
 
 **Phase 3**: ⏳ PENDING
